@@ -5,20 +5,23 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "whip-demo",
-	"main": "worker/index.js",
-	"compatibility_date": "2025-04-28",
-	"assets": {
-		"directory": "./public/",
-		"not_found_handling": "single-page-application"
-	},
-	"kv_namespaces": [
-		{
-			"binding": "asa",
-			"id": "885d6a1f1030482e8a1424c4ad7045d8"
-		}
+	"main": "./src/worker/index.ts",
+	"compatibility_date": "2025-04-01",
+	"compatibility_flags": [
+		"nodejs_compat"
 	],
 	"observability": {
 		"enabled": true
+	},
+	"upload_source_maps": true,
+	"kv_namespaces": [
+	  {
+		"binding": "asa",
+		"id": "885d6a1f1030482e8a1424c4ad7045d8"
+	  }
+	],
+	"assets": {
+		"not_found_handling": "single-page-application"
 	}
 	/**
 	 * Smart Placement
