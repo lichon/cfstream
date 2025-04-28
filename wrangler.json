@@ -16,9 +16,9 @@
 	"upload_source_maps": true,
 	"kv_namespaces": [
 	  {
-		"binding": "asa",
-		"preview_id": "bc01928a61e442108420a35ffec9b9b1",
-		"id": "885d6a1f1030482e8a1424c4ad7045d8"
+		"binding": "KVASA",
+		"preview_id": "1bf849fb5a0140f49572bc4fc6a088c1",
+		"id": "c7ee6244ad594aab9957510fd952bf51"
 	  }
 	],
 	"assets": {
