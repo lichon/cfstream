@@ -17,10 +17,12 @@
 	"kv_namespaces": [
 	  {
 		"binding": "asa",
+		"preview_id": "bc01928a61e442108420a35ffec9b9b1",
 		"id": "885d6a1f1030482e8a1424c4ad7045d8"
 	  }
 	],
 	"assets": {
+		"directory": "./dist/",
 		"not_found_handling": "single-page-application"
 	}
 	/**
