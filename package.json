@@ -1,18 +1,25 @@
 {
   "name": "whip-demo",
   "version": "1.0.0",
-  "description": "GitHub Pages project with whipclient.js",
-  "main": "index.html",
+  "type": "module",
   "scripts": {
-    "start": "serve docs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@eyevinn/whip-web-client": "^1.1.2"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "serve": "^14.2.0"
-  },
-  "author": "",
-  "license": "MIT"
+    "@eslint/js": "^9.22.0",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.22.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "vite": "^6.3.1"
+  }
 }
