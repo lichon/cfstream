@@ -18,10 +18,15 @@ app.get('/api/kv/:key', async (c) => {
     }
 })
 
-app.post('/api/session/:sid', async (c) => {
+app.put('/api/session/:sid', async (c) => {
     const body = await c.req.json()
-    const sid = c.req.param('sid')
-    await c.env.KVASA.put(sid, body.offer)
+    const sid = 'session_' + c.req.param('sid')
+    await c.env.KVASA.put(sid, body)
+})
+
+app.get('/api/session/:sid', async (c) => {
+    const sid = 'session_' + c.req.param('sid')
+    return c.json(await c.env.KVASA.get(sid))
 })
 
 export default app
