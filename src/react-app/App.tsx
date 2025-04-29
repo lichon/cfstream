@@ -1,6 +1,6 @@
 // src/App.tsx
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 
 import { WHIPClient } from '@eyevinn/whip-web-client'
@@ -13,13 +13,19 @@ async function newSession() {
 }
 
 function App() {
-  const [session, setSession] = useState<string | null>(() => {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('sid') || ''
-  })
+  const [session, setSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
 
-  async function joinSession(sid: string) {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const sid = params.get('sid')
+    if (sid?.length) {
+      setSession(sid)
+      playSession(sid).catch(console.error)
+    }
+  }, []) // Empty dependency array means this runs once on mount
+
+  async function playSession(sid: string) {
     const video = document.querySelector<HTMLVideoElement>('#video')
     if (!video)
       throw Error('no video element')
@@ -78,30 +84,28 @@ function App() {
     <>
       <div id='control' className='control'>
         <button className='control-bt'
-          onClick={async (e) => {
-            const bt = e.target as HTMLButtonElement
-            if (bt.innerText == 'stop') {
+          onClick={() => {
+            if (session) {
               deleteSession()
-              return
-            }
-            if (session)
-              joinSession(session)
-            else
+            } else {
               createSession()
+            }
           }}
         >
-          {new URLSearchParams(window.location.search).get('sid') ? 'join' : session ? 'stop' : 'start'}
+          {session ? 'stop' : 'start'}
         </button>
         <button className='control-bt'
           onClick={() => {
             const url = new URL(window.location.href)
             url.searchParams.set('sid', session || '')
             navigator.clipboard.writeText(url.toString())
-              // .then(() => { window.open(url.toString(), '_blank') })
               .catch((err) => {
                 console.error('Failed to copy:', err)
                 alert('Failed to copy link')
               })
+            if (import.meta.env.DEV) {
+              window.open(url.toString(), '_blank')
+            }
           }}
         >
           Copy view link
