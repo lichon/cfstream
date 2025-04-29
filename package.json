@@ -11,6 +11,8 @@
     "dash": true
   },
   "dependencies": {
+    "@eyevinn/webrtc-player": "^0.13.0",
+    "@eyevinn/whip-web-client": "^1.1.2",
     "hono": "4.7.7",
     "react": "19.0.0",
     "react-dom": "19.0.0"
@@ -37,6 +39,8 @@
     "cf-typegen": "wrangler types",
     "check": "tsc && vite build && wrangler deploy --dry-run",
     "deploy": "npm run build && wrangler deploy",
+    "watch": "vite build --watch",
+    "wdev": "wrangler dev",
     "dev": "vite",
     "lint": "eslint .",
     "preview": "npm run build && vite preview"

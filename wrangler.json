@@ -21,8 +21,11 @@
 		"id": "c7ee6244ad594aab9957510fd952bf51"
 	  }
 	],
+	"vars": {
+		"ENV": "dev"
+	},
 	"assets": {
-		"directory": "./dist/",
+		"directory": "./src/",
 		"not_found_handling": "single-page-application"
 	}
 	/**
