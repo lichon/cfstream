@@ -105,7 +105,13 @@ function App() {
       <div id='control' className='control'>
         <button className='control-bt'
           onClick={() => {
-            const _s = whipClient ? deleteSession() : createSession()
+            const video = document.querySelector<HTMLVideoElement>('#video')
+            if (whepPlayer && video) {
+              video.muted = !video.muted
+              return
+            }
+            // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+            whipClient ? deleteSession() : createSession()
           }}
         >
           {session ? 'stop' : 'start'}
