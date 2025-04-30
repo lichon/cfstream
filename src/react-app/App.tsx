@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 
 import { WHIPClient } from '@eyevinn/whip-web-client'
-import { WebRTCPlayer } from "@eyevinn/webrtc-player";
+import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import QRCode from 'qrcode'
 
 async function newSession() {
@@ -13,24 +13,28 @@ async function newSession() {
   return json.sessionId
 }
 
+let _firstLoad = true
+
 function App() {
   const [session, setSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
+  const [whepPlayer, setWHEPPlayer] = useState<WebRTCPlayer | null>()
   const [qrVisible, setQrVisible] = useState(false)
 
   useEffect(() => {
+    if (!_firstLoad) return
+    _firstLoad = false
     const params = new URLSearchParams(window.location.search)
     const sid = params.get('sid')
     if (sid?.length) {
-      setSession(sid)
-      playSession(sid).catch(console.error)
+      playSession(sid)
     }
   }, []) // Empty dependency array means this runs once on mount
 
   async function playSession(sid: string) {
     const video = document.querySelector<HTMLVideoElement>('#video')
-    if (!video)
-      throw Error('no video element')
+    if (whepPlayer || !video)
+      return
 
     const player = new WebRTCPlayer({
       video: video,
@@ -39,12 +43,13 @@ function App() {
       debug: true,
       iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
     })
-    const url = new URL(window.location.href)
-    url.pathname = `api/session/${sid}/join`
-    url.search = ''
-    await player.load(url);
-    player.unmute()
-    return sid
+    setWHEPPlayer(player)
+    setSession(sid)
+
+    const sourceUrl = new URL(window.location.href)
+    sourceUrl.pathname = `api/session/${sid}/join`
+    sourceUrl.search = ''
+    await player.load(sourceUrl)
   }
 
   async function deleteSession() {
@@ -146,7 +151,7 @@ function App() {
         </button>
       </div>
       <div className='media'>
-        <video id='video' autoPlay muted></video>
+        <video id='video' autoPlay muted controls></video>
       </div>
 
       {/* Add QR code canvas */}
