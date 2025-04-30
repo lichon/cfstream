@@ -8,6 +8,7 @@ import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import QRCode from 'qrcode'
 
 let _firstLoad = true
+const sid = new URLSearchParams(window.location.search).get('sid')
 const STUN_SERVERS = [{ urls: 'stun:stun.cloudflare.com:3478' }]
 
 function App() {
@@ -19,14 +20,22 @@ function App() {
   useEffect(() => {
     if (!_firstLoad) return
     _firstLoad = false
-    const params = new URLSearchParams(window.location.search)
-    const sid = params.get('sid')
     if (sid?.length) {
-      playSession(sid)
+      play()
     }
   }, []) // Empty dependency array means this runs once on mount
 
-  async function playSession(sid: string) {
+  async function pause() {
+    const video = document.querySelector<HTMLVideoElement>('#video')
+    if (!whepPlayer || !video)
+      return
+
+    whepPlayer.destroy()
+    setWHEPPlayer(null)
+    setSession(null)
+  }
+
+  async function play() {
     const video = document.querySelector<HTMLVideoElement>('#video')
     if (whepPlayer || !video)
       return
@@ -106,13 +115,13 @@ function App() {
       <div id='control' className='control'>
         <button className='control-bt'
           onClick={() => {
-            const video = document.querySelector<HTMLVideoElement>('#video')
-            if (whepPlayer && video) {
-              video.muted = !video.muted
-              return
+            if (sid?.length) {
+              // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+              whepPlayer ? pause() : play()
+            } else {
+              // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+              whipClient ? deleteSession() : createSession()
             }
-            // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-            whipClient ? deleteSession() : createSession()
           }}
         >
           {session ? 'stop' : 'start'}
