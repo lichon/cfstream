@@ -5,6 +5,7 @@ import './App.css'
 
 import { WHIPClient } from '@eyevinn/whip-web-client'
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
+import LoggingOverlay from './components/logger'
 import QRCode from 'qrcode'
 
 let _firstLoad = true
@@ -87,7 +88,7 @@ function App() {
 
     const mediaStream = await navigator.mediaDevices.getUserMedia({
       video: true,
-      audio: true,
+      audio: { deviceId: 'communications' },
     })
     video.srcObject = mediaStream
     await client.ingest(mediaStream)
@@ -95,6 +96,13 @@ function App() {
     const sid = resourceUrl.split('/').pop()
     setSession(sid)
     setWHIPClient(client)
+  }
+
+  async function checkFacingCamera() {
+    const mediaDevices = await navigator.mediaDevices.enumerateDevices()
+    mediaDevices.forEach(d => {
+      console.log('device', d)
+    })
   }
 
   // Add this function to generate QR code
@@ -149,14 +157,7 @@ function App() {
         </button>
         <button className='control-bt'
           onClick={async () => {
-            try {
-              const res = await fetch('/api/sessions/' + session)
-              if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`)
-              }
-            } catch (error) {
-              console.error('test failed:', error)
-            }
+            checkFacingCamera()
           }}
         >
           Info
@@ -175,6 +176,7 @@ function App() {
           </div>
         </div>
       )}
+      <LoggingOverlay />
     </>
   )
 }
