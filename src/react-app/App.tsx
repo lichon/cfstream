@@ -50,6 +50,7 @@ function App() {
     sourceUrl.pathname = `api/session/${sid}/join`
     sourceUrl.search = ''
     await player.load(sourceUrl)
+    video.controls = true
   }
 
   async function deleteSession() {
@@ -151,7 +152,7 @@ function App() {
         </button>
       </div>
       <div className='media'>
-        <video id='video' autoPlay muted controls></video>
+        <video id='video' autoPlay muted></video>
       </div>
 
       {/* Add QR code canvas */}

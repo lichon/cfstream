@@ -22,10 +22,11 @@
 
 .media {
   width: 100%;
-  min-height: 100vh;
+  min-height: 100%;
 }
 
 #video {
+  max-width: 100%;
   width: auto;
   height: 100vh;
 }
