@@ -61,7 +61,7 @@ const LoggingOverlay: React.FC = () => {
         style={{
           position: 'fixed',
           bottom: '10px',
-          right: '10px',
+          left: '0px',
           zIndex: 9999,
         }}
       >
@@ -72,9 +72,8 @@ const LoggingOverlay: React.FC = () => {
           style={{
             position: 'fixed',
             bottom: '50px',
-            right: '10px',
-            width: '480px',
-            height: '360px',
+            maxWidth: '100%',
+            maxHeight: '60%',
             backgroundColor: 'rgba(0, 0, 0, 0.8)',
             color: 'white',
             padding: '10px',
