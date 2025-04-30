@@ -103,7 +103,7 @@ app.post('/api/sessions', async (c) => {
     return c.text('Error: ' + err, 500)
   })
   const jsonResponse = await res.json() as TracksResponse
-  c.header('Location', sid)
+  c.header('Location', `sessions/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
   return c.text(jsonResponse.sessionDescription.sdp)
@@ -111,6 +111,7 @@ app.post('/api/sessions', async (c) => {
 
 app.delete('/api/sessions/:sid', async (c) => {
   console.log('delete session', c.req.param('sid'))
+  return c.json({})
 })
 
 app.post('/api/sessions/:sid', async (c) => {

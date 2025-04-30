@@ -56,6 +56,7 @@ function App() {
       video.srcObject = null
       await whipClient.destroy()
       setWHIPClient(null)
+      setSession(null)
     }
   }
 
