@@ -5,6 +5,7 @@ import './App.css'
 
 import { WHIPClient } from '@eyevinn/whip-web-client'
 import { WebRTCPlayer } from "@eyevinn/webrtc-player";
+import QRCode from 'qrcode'
 
 async function newSession() {
   const res = await fetch('/api/sessions/new', { method: 'POST' })
@@ -15,6 +16,7 @@ async function newSession() {
 function App() {
   const [session, setSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
+  const [qrVisible, setQrVisible] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -80,6 +82,19 @@ function App() {
     setWHIPClient(client)
   }
 
+  // Add this function to generate QR code
+  async function generateQR(url: string) {
+    try {
+      const canvas = document.getElementById('qrCode') as HTMLCanvasElement
+      await QRCode.toCanvas(canvas, url, {
+        width: 240,
+        margin: 0
+      })
+    } catch (err) {
+      console.error('Error generating QR code:', err)
+    }
+  }
+
   return (
     <>
       <div id='control' className='control'>
@@ -96,16 +111,21 @@ function App() {
         </button>
         <button className='control-bt'
           onClick={() => {
-            const url = new URL(window.location.href)
-            url.searchParams.set('sid', session || '')
-            navigator.clipboard.writeText(url.toString())
+            const shareUrl = new URL(window.location.href)
+            if (session?.length)
+              shareUrl.searchParams.set('sid', session)
+            const urlString = shareUrl.toString()
+            
+            navigator.clipboard.writeText(urlString)
               .catch((err) => {
                 console.error('Failed to copy:', err)
                 alert('Failed to copy link')
               })
-            if (import.meta.env.DEV) {
-              window.open(url.toString(), '_blank')
-            }
+
+            // Generate and show QR code
+            setQrVisible(true)
+            // generate after canvas has shown in DOM
+            setTimeout(() => generateQR(urlString))
           }}
         >
           Copy view link
@@ -128,6 +148,16 @@ function App() {
       <div className='media'>
         <video id='video' autoPlay muted></video>
       </div>
+
+      {/* Add QR code canvas */}
+      {qrVisible && (
+        <div className='qr-overlay' onClick={() => setQrVisible(false)}>
+          <div className='qr-container'>
+            <canvas id='qrCode'></canvas>
+            <p>Click anywhere to close</p>
+          </div>
+        </div>
+      )}
     </>
   )
 }
