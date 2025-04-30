@@ -7,13 +7,8 @@ import { WHIPClient } from '@eyevinn/whip-web-client'
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import QRCode from 'qrcode'
 
-async function newSession() {
-  const res = await fetch('/api/sessions/new', { method: 'POST' })
-  const json = await res.json() as { sessionId: string }
-  return json.sessionId
-}
-
 let _firstLoad = true
+const STUN_SERVERS = [{ urls: 'stun:stun.cloudflare.com:3478' }]
 
 function App() {
   const [session, setSession] = useState<string | null>()
@@ -37,53 +32,57 @@ function App() {
       return
 
     const player = new WebRTCPlayer({
+      debug: true,
       video: video,
       type: 'whep',
       statsTypeFilter: '^candidate-*|^inbound-rtp',
-      debug: true,
-      iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
+      iceServers: STUN_SERVERS
     })
     setWHEPPlayer(player)
     setSession(sid)
 
     const sourceUrl = new URL(window.location.href)
-    sourceUrl.pathname = `api/session/${sid}/join`
+    sourceUrl.pathname = `api/sessions/${sid}`
     sourceUrl.search = ''
     await player.load(sourceUrl)
     video.controls = true
   }
 
   async function deleteSession() {
-    if (whipClient) {
+    const video = document.querySelector<HTMLVideoElement>('#video')
+    if (video?.srcObject && whipClient) {
+      const mediaStream = video.srcObject as MediaStream
+      mediaStream.getTracks().forEach(track => track.stop())
+      video.srcObject = null
       await whipClient.destroy()
       setWHIPClient(null)
-      setSession(null)
     }
   }
 
   async function createSession() {
-    const sid = await newSession()
+    const video = document.querySelector<HTMLVideoElement>('#video')
+    if (!video)
+      throw Error('video tag not found')
+
     const url = new URL(window.location.href)
     const client = new WHIPClient({
-      endpoint: `${url}api/session/${sid}`,
+      endpoint: `${url}api/sessions`,
       opts: {
         debug: true,
         noTrickleIce: true,
-        iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }]
-      }
+        iceServers: STUN_SERVERS,
+      },
     })
     await client.setIceServersFromEndpoint()
-
-    const videoIngest = document.querySelector<HTMLVideoElement>('#video')
-    if (!videoIngest)
-      throw Error('video tag not found')
 
     const mediaStream = await navigator.mediaDevices.getUserMedia({
       video: true,
       audio: true,
     })
-    videoIngest.srcObject = mediaStream
+    video.srcObject = mediaStream
     await client.ingest(mediaStream)
+    const resourceUrl = await client.getResourceUrl()
+    const sid = resourceUrl.split('/').pop()
     setSession(sid)
     setWHIPClient(client)
   }
@@ -106,11 +105,7 @@ function App() {
       <div id='control' className='control'>
         <button className='control-bt'
           onClick={() => {
-            if (session) {
-              deleteSession()
-            } else {
-              createSession()
-            }
+            const _s = whipClient ? deleteSession() : createSession()
           }}
         >
           {session ? 'stop' : 'start'}
@@ -139,7 +134,7 @@ function App() {
         <button className='control-bt'
           onClick={async () => {
             try {
-              const res = await fetch('/api/session/' + session)
+              const res = await fetch('/api/sessions/' + session)
               if (!res.ok) {
                 throw new Error(`HTTP error! status: ${res.status}`)
               }

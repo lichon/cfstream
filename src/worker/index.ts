@@ -88,28 +88,14 @@ app.post('/api/kv/:key', async (c) => {
   const key = c.req.param('key')
   const value = await c.req.text()
   await c.env.KVASA.put(key, value)
-  return c.text(`Key ${key} set to ${value}`)
+  const v2 = await c.env.KVASA.get(key)
+  return c.text(`Key ${key} set to ${v2}`)
 })
 
-app.get('/api/kv/:key', async (c) => {
-  const key = c.req.param('key')
-  const v = await c.env.KVASA.get(key)
-  if (v) {
-    return c.text(v)
-  } else {
-    return c.text(`Key not found`)
-  }
-})
-
-app.post('/api/sessions/new', async (c) => {
-  const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/new`, { method: 'POST' })
-  const jsonRes = await res.json() as { sessionId: string }
-  return c.json(jsonRes)
-})
-
-app.post('/api/session/:sid', async (c) => {
+app.post('/api/sessions', async (c) => {
+  const session = await newSession(c.env.RTC_API_TOKEN)
+  const sid = session.sessionId
   const body = await c.req.text()
-  const sid = c.req.param('sid')
   const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
     method: 'POST',
     body: JSON.stringify(createTracksRequest(body))
@@ -117,10 +103,17 @@ app.post('/api/session/:sid', async (c) => {
     return c.text('Error: ' + err, 500)
   })
   const jsonResponse = await res.json() as TracksResponse
+  c.header('Location', sid)
+  c.header('Access-Control-Expose-Headers', 'Location')
+  c.header('Access-Control-Allow-Origin', '*')
   return c.text(jsonResponse.sessionDescription.sdp)
 })
 
-app.post('/api/session/:sid/join', async (c) => {
+app.delete('/api/sessions/:sid', async (c) => {
+  console.log('delete session', c.req.param('sid'))
+})
+
+app.post('/api/sessions/:sid', async (c) => {
   let sid = c.req.param('sid')
   const playerSdp = await c.req.text()
   const sessionStat = await getSessionTracks(c.env.RTC_API_TOKEN, sid)
@@ -138,7 +131,7 @@ app.post('/api/session/:sid/join', async (c) => {
   return c.text(joinRes.sessionDescription.sdp, 201)
 })
 
-app.get('/api/session/:sid', async (c) => {
+app.get('/api/sessions/:sid', async (c) => {
   const sid = c.req.param('sid')
   return c.json(await getSessionTracks(c.env.RTC_API_TOKEN, sid))
 })
