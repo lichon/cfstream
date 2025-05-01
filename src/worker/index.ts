@@ -79,7 +79,7 @@ function createTracksRequest(sdp?: string, tracks?: Track[], sid?: string): Trac
   } as TracksRequest
 }
 
-const send_web_hook = (hookURL: string, message: string) => {
+const send_web_hook = async (hookURL: string, message: string) => {
   return fetch(hookURL, {
     method: 'POST',
     headers: {
@@ -89,8 +89,6 @@ const send_web_hook = (hookURL: string, message: string) => {
       msgtype: 'text',
       text: { content: message }
     })
-  }).catch(() => {
-    console.error(`webhook failed ${message}`)
   })
 }
 
@@ -118,7 +116,7 @@ app.post('/api/sessions', async (c) => {
   })
   console.log('new session', sid)
   if (c.env.WEB_HOOK?.length) {
-    await send_web_hook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?${sid}`)
+    await send_web_hook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}`)
   }
 
   const jsonResponse = await res.json() as TracksResponse
@@ -133,7 +131,6 @@ app.delete('/api/sessions/:sid', async (c) => {
   if (c.env.WEB_HOOK?.length) {
     await send_web_hook(c.env.WEB_HOOK, `session end ${sid}`)
   }
-  c.header('X-HOOK', `${c.env.WEB_HOOK.substring(0, 10)}`)
   console.log('delete session', sid)
   return c.json({})
 })
