@@ -147,9 +147,10 @@ function App() {
         </button>
         <button className='control-bt'
           onClick={() => {
+            if (!session?.length)
+              return
             const shareUrl = new URL(window.location.href)
-            if (session?.length)
-              shareUrl.searchParams.set('sid', session)
+            shareUrl.searchParams.set('sid', session)
             const urlString = shareUrl.toString()
             
             navigator.clipboard.writeText(urlString)
