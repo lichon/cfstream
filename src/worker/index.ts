@@ -80,7 +80,7 @@ function createTracksRequest(sdp?: string, tracks?: Track[], sid?: string): Trac
 }
 
 const send_web_hook = (hookURL: string, message: string) => {
-  fetch(hookURL, {
+  return fetch(hookURL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -89,10 +89,6 @@ const send_web_hook = (hookURL: string, message: string) => {
       msgtype: 'text',
       text: { content: message }
     })
-  }).then(() => {
-    console.log('web hook sent')
-  }).catch(() => {
-    console.log('web hook fail')
   })
 }
 
@@ -111,10 +107,6 @@ app.post('/api/kv/:key', async (c) => {
 app.post('/api/sessions', async (c) => {
   const session = await newSession(c.env.RTC_API_TOKEN)
   const sid = session.sessionId
-  if (c.env.WEB_HOOK?.length) {
-    const host = c.req.header('Host')
-    send_web_hook(c.env.WEB_HOOK, `https://${host}?${sid}`)
-  }
   const body = await c.req.text()
   const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
     method: 'POST',
@@ -122,6 +114,12 @@ app.post('/api/sessions', async (c) => {
   }).catch(err => {
     return c.text('Error: ' + err, 500)
   })
+
+  if (c.env.WEB_HOOK?.length) {
+    const host = c.req.header('Host')
+    await send_web_hook(c.env.WEB_HOOK, `https://${host}?${sid}`)
+  }
+
   const jsonResponse = await res.json() as TracksResponse
   c.header('Location', `sessions/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
@@ -130,7 +128,11 @@ app.post('/api/sessions', async (c) => {
 })
 
 app.delete('/api/sessions/:sid', async (c) => {
-  console.log('delete session', c.req.param('sid'))
+  const sid = c.req.param('sid')
+  if (c.env.WEB_HOOK?.length) {
+    await send_web_hook(c.env.WEB_HOOK, `session end ${sid}`)
+  }
+  console.log('delete session', sid)
   return c.json({})
 })
 
