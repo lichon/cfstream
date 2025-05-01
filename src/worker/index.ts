@@ -2,13 +2,12 @@ import { Hono } from 'hono'
 
 type Bindings = {
   KVASA: KVNamespace
-  ICE_URL: string
-  ICE_KEY: string
   RTC_APP_ID: string
   RTC_API_TOKEN: string
+  WEB_HOOK: string
 }
 
-const RTC_URL = "https://rtc.live.cloudflare.com/v1/apps/811fa2b2719039f47b80ad3154dca458"
+const RTC_URL = 'https://rtc.live.cloudflare.com/v1/apps/811fa2b2719039f47b80ad3154dca458'
 
 interface NewSessionResponse {
   sessionId: string
@@ -80,6 +79,23 @@ function createTracksRequest(sdp?: string, tracks?: Track[], sid?: string): Trac
   } as TracksRequest
 }
 
+const send_web_hook = (hookURL: string, message: string) => {
+  fetch(hookURL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      msgtype: 'text',
+      text: { content: message }
+    })
+  }).then(() => {
+    console.log('web hook sent')
+  }).catch(() => {
+    console.log('web hook fail')
+  })
+}
+
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/api/', (c) => c.json({ name: 'api' }))
@@ -95,6 +111,10 @@ app.post('/api/kv/:key', async (c) => {
 app.post('/api/sessions', async (c) => {
   const session = await newSession(c.env.RTC_API_TOKEN)
   const sid = session.sessionId
+  if (c.env.WEB_HOOK?.length) {
+    const host = c.req.header('Host')
+    send_web_hook(c.env.WEB_HOOK, `https://${host}?${sid}`)
+  }
   const body = await c.req.text()
   const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
     method: 'POST',
