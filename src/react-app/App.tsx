@@ -86,22 +86,43 @@ function App() {
     if (!video)
       throw Error('video tag not found')
 
-    const url = new URL(window.location.href)
-    const client = new WHIPClient({
-      endpoint: `${url}api/sessions`,
-      opts: {
-        debug: true,
-        noTrickleIce: true,
-        iceServers: STUN_SERVERS,
-      },
-    })
-    await client.setIceServersFromEndpoint()
-
     const mediaStream = await navigator.mediaDevices.getUserMedia({
       video: true,
       audio: { deviceId: 'communications' },
     })
     video.srcObject = mediaStream
+    const videoTrack = mediaStream.getVideoTracks().find(t => t.enabled)
+
+    const client = new WHIPClient({
+      endpoint: `${window.location.href}api/sessions`,
+      opts: {
+        debug: true,
+        noTrickleIce: true,
+        iceServers: STUN_SERVERS,
+      },
+      peerConnectionFactory: (config: RTCConfiguration) => {
+        const peer = new RTCPeerConnection(config)
+        peer.addEventListener('connectionstatechange', () => {
+          if (peer.connectionState != 'connected' || !videoTrack) {
+            return
+          }
+          console.log('peer senders', peer.getSenders())
+          const sender = peer.getSenders().find(s => s.track?.id == videoTrack.id)
+          if (sender) {
+            console.log('set sender params')
+            const params = sender.getParameters()
+            params.encodings = [{
+              maxBitrate: 1000000,
+            }]
+            sender.setParameters(params)
+          } else {
+            console.log('failed to get sender', peer)
+          }
+        })
+        return peer
+      }
+    })
+    await client.setIceServersFromEndpoint()
     await client.ingest(mediaStream)
     const resourceUrl = await client.getResourceUrl()
     const sid = resourceUrl.split('/').pop()
