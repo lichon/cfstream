@@ -106,7 +106,6 @@ function App() {
           if (peer.connectionState != 'connected' || !videoTrack) {
             return
           }
-          console.log('peer senders', peer.getSenders())
           const sender = peer.getSenders().find(s => s.track?.id == videoTrack.id)
           if (sender) {
             console.log('set sender params')
@@ -177,7 +176,6 @@ function App() {
             navigator.clipboard.writeText(urlString)
               .catch((err) => {
                 console.error('Failed to copy:', err)
-                alert('Failed to copy link')
               })
 
             // Generate and show QR code
