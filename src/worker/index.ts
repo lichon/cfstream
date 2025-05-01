@@ -116,8 +116,11 @@ app.delete('/api/sessions/:sid', async (c) => {
 
 app.post('/api/sessions/:sid', async (c) => {
   let sid = c.req.param('sid')
-  const playerSdp = await c.req.text()
   const sessionStat = await getSessionTracks(c.env.RTC_API_TOKEN, sid)
+  if (!sessionStat?.tracks?.length) {
+    throw Error('tracks not found')
+  }
+  const playerSdp = await c.req.text()
   const request = createTracksRequest(playerSdp, sessionStat.tracks, sid)
 
   // use new session

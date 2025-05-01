@@ -24,6 +24,7 @@ function App() {
     if (sid?.length) {
       play()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
 
   async function pause() {
