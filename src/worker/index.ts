@@ -89,6 +89,8 @@ const send_web_hook = (hookURL: string, message: string) => {
       msgtype: 'text',
       text: { content: message }
     })
+  }).catch(() => {
+    console.error(`webhook failed ${message}`)
   })
 }
 
@@ -114,10 +116,9 @@ app.post('/api/sessions', async (c) => {
   }).catch(err => {
     return c.text('Error: ' + err, 500)
   })
-
+  console.log('new session', sid)
   if (c.env.WEB_HOOK?.length) {
-    const host = c.req.header('Host')
-    await send_web_hook(c.env.WEB_HOOK, `https://${host}?${sid}`)
+    await send_web_hook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?${sid}`)
   }
 
   const jsonResponse = await res.json() as TracksResponse
@@ -132,6 +133,7 @@ app.delete('/api/sessions/:sid', async (c) => {
   if (c.env.WEB_HOOK?.length) {
     await send_web_hook(c.env.WEB_HOOK, `session end ${sid}`)
   }
+  c.header('X-HOOK', `${c.env.WEB_HOOK.substring(0, 10)}`)
   console.log('delete session', sid)
   return c.json({})
 })
@@ -352,7 +354,6 @@ function _createAnswerForPlayer(sfuMedia: MediaSdp[], playerMedia: MediaSdp[], b
     answerLines.push(media.mid)
     answerLines.push(media.sendOrRecv)
   }
-  console.log('ans2', answerLines)
 
   return {
     type: 'answer',
@@ -419,10 +420,6 @@ function _createAnswerForSfu(sfuMedia: MediaSdp[], playerMedia: MediaSdp[], base
     answerLines.push(line)
   }
 
-  console.log('a', validAudio)
-  console.log('v', validVideo)
-  console.log('final', finalMedia)
-  console.log('ans1', answerLines)
 
   let hasCandidate = false
   for (const media of finalMedia) {
@@ -451,7 +448,6 @@ function _createAnswerForSfu(sfuMedia: MediaSdp[], playerMedia: MediaSdp[], base
     answerLines.push(media.mid)
     answerLines.push(media.sendOrRecv)
   }
-  console.log('ans2', answerLines)
 
   return {
     type: 'answer',
