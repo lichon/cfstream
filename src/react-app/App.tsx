@@ -12,6 +12,10 @@ let _firstLoad = true
 const sid = new URLSearchParams(window.location.search).get('sid')
 const STUN_SERVERS = [{ urls: 'stun:stun.cloudflare.com:3478' }]
 
+function getVideoElement() {
+  return window.document.querySelector<HTMLVideoElement>('#video')
+}
+
 function App() {
   const [session, setSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
@@ -27,9 +31,8 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
 
-  async function pause() {
-    const video = document.querySelector<HTMLVideoElement>('#video')
-    if (!whepPlayer || !video)
+  async function stop() {
+    if (!whepPlayer)
       return
 
     whepPlayer.destroy()
@@ -38,7 +41,7 @@ function App() {
   }
 
   async function play() {
-    const video = document.querySelector<HTMLVideoElement>('#video')
+    const video = getVideoElement()
     if (whepPlayer || !video)
       return
 
@@ -47,7 +50,7 @@ function App() {
       video: video,
       type: 'whep',
       statsTypeFilter: '^candidate-*|^inbound-rtp',
-      iceServers: STUN_SERVERS
+      iceServers: STUN_SERVERS,
     })
     setWHEPPlayer(player)
     setSession(sid)
@@ -56,11 +59,25 @@ function App() {
     sourceUrl.pathname = `api/sessions/${sid}`
     sourceUrl.search = ''
     await player.load(sourceUrl)
+
+    let videoLastTime = 0
+    const checkVideoTime = () => {
+      console.log('check video time', video.currentTime, videoLastTime)
+      if (video.currentTime == videoLastTime) {
+        player.destroy()
+        setWHEPPlayer(null)
+        setSession(null)
+      } else {
+        videoLastTime = video.currentTime
+        setTimeout(checkVideoTime, 10000)
+      }
+    }
+    setTimeout(checkVideoTime, 10000)
     video.controls = true
   }
 
   async function deleteSession() {
-    const video = document.querySelector<HTMLVideoElement>('#video')
+    const video = getVideoElement()
     if (video?.srcObject && whipClient) {
       const mediaStream = video.srcObject as MediaStream
       mediaStream.getTracks().forEach(track => track.stop())
@@ -72,7 +89,7 @@ function App() {
   }
 
   async function createSession() {
-    const video = document.querySelector<HTMLVideoElement>('#video')
+    const video = getVideoElement()
     if (!video)
       throw Error('video tag not found')
 
@@ -126,7 +143,7 @@ function App() {
           onClick={() => {
             if (sid?.length) {
               // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-              whepPlayer ? pause() : play()
+              whepPlayer ? stop() : play()
             } else {
               // eslint-disable-next-line @typescript-eslint/no-unused-expressions
               whipClient ? deleteSession() : createSession()

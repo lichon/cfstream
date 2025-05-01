@@ -118,7 +118,7 @@ app.post('/api/sessions/:sid', async (c) => {
   let sid = c.req.param('sid')
   const sessionStat = await getSessionTracks(c.env.RTC_API_TOKEN, sid)
   if (!sessionStat?.tracks?.length) {
-    throw Error('tracks not found')
+    return c.text('session not found', 404)
   }
   const playerSdp = await c.req.text()
   const request = createTracksRequest(playerSdp, sessionStat.tracks, sid)
