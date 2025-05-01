@@ -49,7 +49,7 @@ function App() {
       debug: true,
       video: video,
       type: 'whep',
-      statsTypeFilter: '^candidate-*|^inbound-rtp',
+      statsTypeFilter: '^inbound-rtp',
       iceServers: STUN_SERVERS,
     })
     setWHEPPlayer(player)
@@ -60,19 +60,12 @@ function App() {
     sourceUrl.search = ''
     await player.load(sourceUrl)
 
-    let videoLastTime = 0
-    const checkVideoTime = () => {
-      console.log('check video time', video.currentTime, videoLastTime)
-      if (video.currentTime == videoLastTime) {
-        player.destroy()
-        setWHEPPlayer(null)
-        setSession(null)
-      } else {
-        videoLastTime = video.currentTime
-        setTimeout(checkVideoTime, 10000)
-      }
-    }
-    setTimeout(checkVideoTime, 10000)
+    player.on('no-media', () => {
+      console.log('player media timeout occured')
+      player.destroy()
+      setWHEPPlayer(null)
+      setSession(null)
+    })
     video.controls = true
   }
 
