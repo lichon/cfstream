@@ -116,7 +116,7 @@ app.post('/api/sessions', async (c) => {
   })
   console.log('new session', sid)
   if (c.env.WEB_HOOK?.length) {
-    await send_web_hook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}`)
+    await send_web_hook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}_`)
   }
 
   const jsonResponse = await res.json() as TracksResponse
