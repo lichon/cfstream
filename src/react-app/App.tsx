@@ -6,7 +6,7 @@ import './App.css'
 import { WHIPClient } from '@eyevinn/whip-web-client'
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import LoggingOverlay from './components/logger'
-import QRCode from 'qrcode'
+import QROverlay from './components/qr-overlay'
 
 let _firstLoad = true
 const sid = new URLSearchParams(window.location.search).get('sid')
@@ -21,6 +21,7 @@ function App() {
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
   const [whepPlayer, setWHEPPlayer] = useState<WebRTCPlayer | null>()
   const [qrVisible, setQrVisible] = useState(false)
+  const [showHoverMenu, setShowHoverMenu] = useState(false)
 
   useEffect(() => {
     if (!_firstLoad) return
@@ -32,12 +33,11 @@ function App() {
   }, []) // Empty dependency array means this runs once on mount
 
   async function stop() {
-    if (!whepPlayer)
-      return
-
-    whepPlayer.destroy()
-    setWHEPPlayer(null)
-    setSession(null)
+    if (whepPlayer) {
+      whepPlayer.destroy()
+      setWHEPPlayer(null)
+      setSession(null)
+    }
   }
 
   async function play() {
@@ -70,28 +70,30 @@ function App() {
   }
 
   async function deleteSession() {
-    const video = getVideoElement()
-    if (video?.srcObject && whipClient) {
-      const mediaStream = video.srcObject as MediaStream
-      mediaStream.getTracks().forEach(track => track.stop())
-      video.srcObject = null
+    if (whipClient) {
       await whipClient.destroy()
       setWHIPClient(null)
       setSession(null)
     }
   }
 
-  async function createSession() {
+  async function createSession(useScreen?: boolean) {
     const video = getVideoElement()
     if (!video)
       throw Error('video tag not found')
 
-    const mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: { deviceId: 'communications' },
-    })
+    let mediaStream
+    if (useScreen) {
+      mediaStream = await navigator.mediaDevices.getDisplayMedia()
+    } else {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: { deviceId: 'communications' },
+      })
+    }
     video.srcObject = mediaStream
     const videoTrack = mediaStream.getVideoTracks().find(t => t.enabled)
+    console.log(`video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
 
     const client = new WHIPClient({
       endpoint: `${window.location.href}api/sessions`,
@@ -136,35 +138,42 @@ function App() {
     })
   }
 
-  // Add this function to generate QR code
-  async function generateQR(url: string) {
-    try {
-      const canvas = document.getElementById('qrCode') as HTMLCanvasElement
-      await QRCode.toCanvas(canvas, url, {
-        width: 240,
-        margin: 0
-      })
-    } catch (err) {
-      console.error('Error generating QR code:', err)
-    }
-  }
-
   return (
     <>
       <div id='control' className='control'>
-        <button className='control-bt'
-          onClick={() => {
-            if (sid?.length) {
-              // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-              whepPlayer ? stop() : play()
-            } else {
-              // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-              whipClient ? deleteSession() : createSession()
-            }
-          }}
+        <div className='control-button-container'
+          onMouseEnter={() => setShowHoverMenu(true)}
+          onMouseLeave={() => setShowHoverMenu(false)}
         >
-          {session ? 'stop' : 'start'}
-        </button>
+          <button className='control-bt'
+            onClick={() => {
+              if (session) {
+                deleteSession()
+                stop()
+              } else {
+                setShowHoverMenu(!showHoverMenu)
+              }
+            }}
+          >
+            {session ? 'stop' : 'start'}
+          </button>
+          {!session && showHoverMenu && (
+            <div className='hover-menu'>
+              <button 
+                onClick={() => createSession(false)}
+                className='hover-menu-item'
+              >
+                Start with Camera
+              </button>
+              <button 
+                onClick={() => createSession(true)}
+                className='hover-menu-item'
+              >
+                Start Screen Share
+              </button>
+            </div>
+          )}
+        </div>
         <button className='control-bt'
           onClick={() => {
             if (!session?.length)
@@ -174,14 +183,7 @@ function App() {
             const urlString = shareUrl.toString()
             
             navigator.clipboard.writeText(urlString)
-              .catch((err) => {
-                console.error('Failed to copy:', err)
-              })
-
-            // Generate and show QR code
             setQrVisible(true)
-            // generate after canvas has shown in DOM
-            setTimeout(() => generateQR(urlString))
           }}
         >
           Copy view link
@@ -198,15 +200,11 @@ function App() {
         <video id='video' autoPlay muted></video>
       </div>
 
-      {/* Add QR code canvas */}
-      {qrVisible && (
-        <div className='qr-overlay' onClick={() => setQrVisible(false)}>
-          <div className='qr-container'>
-            <canvas id='qrCode'></canvas>
-            <p>Click anywhere to close</p>
-          </div>
-        </div>
-      )}
+      <QROverlay
+        url={`${window.location.href}?sid=${session}`}
+        show={qrVisible}
+        onClose={() => setQrVisible(false)}
+      />
       <LoggingOverlay />
     </>
   )

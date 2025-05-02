@@ -3,6 +3,38 @@
   text-align: center;
 }
 
+.control-button-container {
+  position: relative;
+  display: inline-block;
+}
+
+.hover-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+  z-index: 1000;
+  min-width: 150px;
+}
+
+.hover-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: #e0e0e0;
+}
+
+.hover-menu-item:hover {
+  background-color: #404040;
+}
+
 .control {
   position: fixed;
   top: 1rem;
