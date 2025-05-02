@@ -213,7 +213,7 @@ function App() {
           </button>
         </div>
       </div>
-      <div className='media'>
+      <div className='video-wrapper'>
         <video id='video' autoPlay muted></video>
       </div>
 
