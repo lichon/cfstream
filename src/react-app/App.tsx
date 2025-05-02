@@ -116,6 +116,13 @@ function App() {
       },
       peerConnectionFactory: (config: RTCConfiguration) => {
         const peer = new RTCPeerConnection(config)
+        const dc = peer.createDataChannel('server-events')
+        dc.onmessage = (ev) => {
+          console.log('dc msg', ev)
+        }
+        dc.onopen = (ev) => {
+          console.log('dc open', ev)
+        }
         peer.addEventListener('connectionstatechange', () => {
           if (peer.connectionState != 'connected' || !videoTrack) {
             return
@@ -206,7 +213,17 @@ function App() {
         <div className='control-button-container' >
           <button className='control-bt'
             onClick={async () => {
-              checkFacingCamera()
+              await fetch(`${window.location.href}api/sessions/${session}`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                  dataChannels: [{
+                    sessionId: session,
+                    location: 'local',
+                    dataChannelName: 'server-event',
+                  }]
+                })
+              })
+              fetch(`${window.location.href}api/sessions/${session}`)
             }}
           >
             Info
