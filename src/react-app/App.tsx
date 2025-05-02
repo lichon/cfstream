@@ -149,7 +149,10 @@ function App() {
             if (!sid) return
             initDataChannel(sid, 'whip', 'local', peer).then(dc => {
               console.log('dc whip ready')
-              dc.send('hello')
+              dc.onopen = () => {
+                console.log('dc whip open')
+                dc.send('hello')
+              }
             })
           })
         }
@@ -222,12 +225,13 @@ function App() {
             onClick={() => {
               if (!session?.length)
                 return
-              const shareUrl = new URL(window.location.href)
-              shareUrl.searchParams.set('sid', session)
-              const urlString = shareUrl.toString()
 
-              navigator.clipboard.writeText(urlString)
-              setQrVisible(true)
+              navigator.clipboard.writeText(getSessionUrl(session))
+              if (import.meta.env.DEV) {
+                window.open(getSessionUrl(session), '_blank')
+              } else {
+                setQrVisible(true)
+              }
             }}
           >
             Copy view link
