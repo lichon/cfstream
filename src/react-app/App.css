@@ -49,7 +49,7 @@
 }
 
 .control-bt {
-  height: -webkit-fill-available;
+  height: 100%;
 }
 
 .media {

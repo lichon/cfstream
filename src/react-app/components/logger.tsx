@@ -72,7 +72,8 @@ const LoggingOverlay: React.FC = () => {
           style={{
             position: 'fixed',
             bottom: '50px',
-            maxWidth: '100%',
+            minHeight: '10%',
+            width: '100%',
             maxHeight: '60%',
             backgroundColor: 'rgba(0, 0, 0, 0.8)',
             color: 'white',
