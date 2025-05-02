@@ -213,16 +213,7 @@ function App() {
         <div className='control-button-container' >
           <button className='control-bt'
             onClick={async () => {
-              await fetch(`${window.location.href}api/sessions/${session}`, {
-                method: 'PATCH',
-                body: JSON.stringify({
-                  dataChannels: [{
-                    sessionId: session,
-                    location: 'local',
-                    dataChannelName: 'server-event',
-                  }]
-                })
-              })
+              checkFacingCamera()
               fetch(`${window.location.href}api/sessions/${session}`)
             }}
           >
