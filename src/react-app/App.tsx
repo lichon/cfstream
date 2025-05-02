@@ -82,6 +82,29 @@ function App() {
     }
   }
 
+  async function initDataChannel(
+    sid: string,
+    label: string,
+    location: 'local' | 'remote',
+    peer: RTCPeerConnection
+  ): Promise<RTCDataChannel> {
+    const dcRes = await fetch(`${window.location.href}api/sessions/${sid}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        dataChannels: [{
+          sessionId: sid,
+          location: location,
+          dataChannelName: 'whip',
+        }]
+      })
+    }).then(res => res.json())
+    const dc = peer.createDataChannel(label, {
+      negotiated: true,
+      id: dcRes.dataChannels[0].id
+    })
+    return dc
+  }
+
   async function createSession(shareScreen?: boolean) {
     const video = getVideoElement()
     if (!video)
@@ -99,11 +122,7 @@ function App() {
       })
     } else {
       mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          frameRate: { ideal: 30 },
-        },
+        video: true,
         audio: { deviceId: 'communications' },
       })
     }
@@ -120,12 +139,19 @@ function App() {
       },
       peerConnectionFactory: (config: RTCConfiguration) => {
         const peer = new RTCPeerConnection(config)
-        const dc = peer.createDataChannel('server-events')
-        dc.onmessage = (ev) => {
+        const bootDc = peer.createDataChannel('bootstrap')
+        bootDc.onmessage = (ev) => {
           console.log('dc msg', ev)
         }
-        dc.onopen = (ev) => {
-          console.log('dc open', ev)
+        bootDc.onopen = () => {
+          client.getResourceUrl().then(resUrl => {
+            const sid = resUrl.split('/').pop()
+            if (!sid) return
+            initDataChannel(sid, 'whip', 'local', peer).then(dc => {
+              console.log('dc whip ready')
+              dc.send('hello')
+            })
+          })
         }
         peer.addEventListener('connectionstatechange', () => {
           if (peer.connectionState != 'connected' || !videoTrack) {
@@ -152,13 +178,6 @@ function App() {
     const sid = resourceUrl.split('/').pop()
     setSession(sid)
     setWHIPClient(client)
-  }
-
-  async function checkFacingCamera() {
-    const mediaDevices = await navigator.mediaDevices.enumerateDevices()
-    mediaDevices.forEach(d => {
-      console.log('device', d)
-    })
   }
 
   return (
@@ -217,7 +236,6 @@ function App() {
         <div className='control-button-container' >
           <button className='control-bt'
             onClick={async () => {
-              checkFacingCamera()
               fetch(`${window.location.href}api/sessions/${session}`)
             }}
           >

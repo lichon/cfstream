@@ -141,7 +141,9 @@ app.post('/api/sessions', async (c) => {
 app.patch('/api/sessions/:sid', async (c) => {
   const sid = c.req.param('sid')
   const dcRequest = await c.req.json() as DataChannelsRequest
-  console.log('dc requeset', dcRequest)
+  if (!dcRequest?.dataChannels?.length) {
+    return c.json({}, 403)
+  }
 
   const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/datachannels/new`, {
     method: 'POST',
@@ -150,7 +152,6 @@ app.patch('/api/sessions/:sid', async (c) => {
     return c.text('Error: ' + err, 500)
   })
   const jsonRes = await res.json()
-  console.log('patch session', jsonRes)
   return c.json(jsonRes || {})
 })
 
