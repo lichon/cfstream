@@ -11,6 +11,7 @@ const RTC_URL = 'https://rtc.live.cloudflare.com/v1/apps/811fa2b2719039f47b80ad3
 
 interface NewSessionResponse {
   sessionId: string
+  sessionDescription?: SessionDescription
 }
 
 interface Track {
@@ -105,25 +106,21 @@ app.post('/api/kv/:key', async (c) => {
 })
 
 app.post('/api/sessions', async (c) => {
-  const session = await newSession(c.env.RTC_API_TOKEN)
+  const sdp = await c.req.text()
+  const session = await newSession(c.env.RTC_API_TOKEN, { sdp: sdp, type: 'offer' })
   const sid = session.sessionId
-  const body = await c.req.text()
-  const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
-    method: 'POST',
-    body: JSON.stringify(createTracksRequest(body))
-  }).catch(err => {
-    return c.text('Error: ' + err, 500)
-  })
+  if (!session.sessionDescription) {
+    return c.text('Error', 500)
+  }
   console.log('new session', sid)
   if (c.env.WEB_HOOK?.length) {
     await send_web_hook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}_`)
   }
 
-  const jsonResponse = await res.json() as TracksResponse
   c.header('Location', `sessions/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
-  return c.text(jsonResponse.sessionDescription.sdp)
+  return c.text(session.sessionDescription.sdp)
 })
 
 app.delete('/api/sessions/:sid', async (c) => {
@@ -161,8 +158,11 @@ app.get('/api/sessions/:sid', async (c) => {
   return c.json(await getSessionTracks(c.env.RTC_API_TOKEN, sid))
 })
 
-async function newSession(token: string) {
-  const res = await rtcApi(token, `/sessions/new`, { method: 'POST' })
+async function newSession(token: string, offer?: SessionDescription) {
+  const res = await rtcApi(token, `/sessions/new`, {
+    method: 'POST',
+    body: JSON.stringify(offer ? { sessionDescription: offer } : {})
+  })
   return await res.json() as NewSessionResponse
 }
 
