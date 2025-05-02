@@ -16,6 +16,10 @@ function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
 }
 
+function getSessionUrl(sid?: string | null) {
+  return `${window.location.href}?sid=${sid}`
+}
+
 function App() {
   const [session, setSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
@@ -26,9 +30,7 @@ function App() {
   useEffect(() => {
     if (!_firstLoad) return
     _firstLoad = false
-    if (sid?.length) {
-      play()
-    }
+    play()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
 
@@ -40,9 +42,9 @@ function App() {
     }
   }
 
-  async function play() {
+  function play() {
     const video = getVideoElement()
-    if (whepPlayer || !video)
+    if (whepPlayer || !video || !sid?.length)
       return
 
     const player = new WebRTCPlayer({
@@ -58,7 +60,6 @@ function App() {
     const sourceUrl = new URL(window.location.href)
     sourceUrl.pathname = `api/sessions/${sid}`
     sourceUrl.search = ''
-    await player.load(sourceUrl)
 
     player.on('no-media', () => {
       console.log('player media timeout occured')
@@ -66,25 +67,36 @@ function App() {
       setWHEPPlayer(null)
       setSession(null)
     })
+    player.load(sourceUrl)
     video.controls = true
   }
 
   async function deleteSession() {
     if (whipClient) {
-      await whipClient.destroy()
-      setWHIPClient(null)
-      setSession(null)
+      try {
+        await whipClient.destroy()
+      } finally {
+        setWHIPClient(null)
+        setSession(null)
+      }
     }
   }
 
-  async function createSession(useScreen?: boolean) {
+  async function createSession(shareScreen?: boolean) {
     const video = getVideoElement()
     if (!video)
       throw Error('video tag not found')
 
     let mediaStream
-    if (useScreen) {
-      mediaStream = await navigator.mediaDevices.getDisplayMedia()
+    if (shareScreen && navigator.mediaDevices.getDisplayMedia) {
+      mediaStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 60 },
+        },
+        audio: true,
+      })
     } else {
       mediaStream = await navigator.mediaDevices.getUserMedia({
         video: true,
@@ -142,7 +154,7 @@ function App() {
     <>
       <div id='control' className='control'>
         <div className='control-button-container'
-          onMouseEnter={() => setShowHoverMenu(true)}
+          onMouseEnter={() => setShowHoverMenu(!sid?.length && true)}
           onMouseLeave={() => setShowHoverMenu(false)}
         >
           <button className='control-bt'
@@ -151,21 +163,22 @@ function App() {
                 deleteSession()
                 stop()
               } else {
-                setShowHoverMenu(!showHoverMenu)
+                // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+                sid ? play() : setShowHoverMenu(!showHoverMenu)
               }
             }}
           >
-            {session ? 'stop' : 'start'}
+            {session ? 'Stop' : 'Start'}
           </button>
           {!session && showHoverMenu && (
             <div className='hover-menu'>
-              <button 
+              <button
                 onClick={() => createSession(false)}
                 className='hover-menu-item'
               >
                 Start with Camera
               </button>
-              <button 
+              <button
                 onClick={() => createSession(true)}
                 className='hover-menu-item'
               >
@@ -174,34 +187,38 @@ function App() {
             </div>
           )}
         </div>
-        <button className='control-bt'
-          onClick={() => {
-            if (!session?.length)
-              return
-            const shareUrl = new URL(window.location.href)
-            shareUrl.searchParams.set('sid', session)
-            const urlString = shareUrl.toString()
-            
-            navigator.clipboard.writeText(urlString)
-            setQrVisible(true)
-          }}
-        >
-          Copy view link
-        </button>
-        <button className='control-bt'
-          onClick={async () => {
-            checkFacingCamera()
-          }}
-        >
-          Info
-        </button>
+        <div className='control-button-container' >
+          <button className='control-bt'
+            onClick={() => {
+              if (!session?.length)
+                return
+              const shareUrl = new URL(window.location.href)
+              shareUrl.searchParams.set('sid', session)
+              const urlString = shareUrl.toString()
+
+              navigator.clipboard.writeText(urlString)
+              setQrVisible(true)
+            }}
+          >
+            Copy view link
+          </button>
+        </div>
+        <div className='control-button-container' >
+          <button className='control-bt'
+            onClick={async () => {
+              checkFacingCamera()
+            }}
+          >
+            Info
+          </button>
+        </div>
       </div>
       <div className='media'>
         <video id='video' autoPlay muted></video>
       </div>
 
       <QROverlay
-        url={`${window.location.href}?sid=${session}`}
+        url={`${getSessionUrl(session)}`}
         show={qrVisible}
         onClose={() => setQrVisible(false)}
       />

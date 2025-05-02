@@ -49,7 +49,7 @@
 }
 
 .control-bt {
-  margin-right: 1em;
+  height: -webkit-fill-available;
 }
 
 .media {
