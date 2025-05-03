@@ -40,6 +40,7 @@ interface TracksRequest {
 
 interface SessionStat {
   tracks: Track[]
+  datachannels: Track[]
   errorCode: string
   errorDescription: string
 }
@@ -165,17 +166,18 @@ app.delete('/api/sessions/:sid', async (c) => {
 })
 
 app.post('/api/sessions/:sid', async (c) => {
-  let sid = c.req.param('sid')
-  const sessionStat = await getSessionTracks(c.env.RTC_API_TOKEN, sid)
-  if (!sessionStat?.tracks?.length) {
+  const whipSid = c.req.param('sid')
+  const sessionStat = await getSessionTracks(c.env.RTC_API_TOKEN, whipSid)
+  if (!sessionStat?.tracks?.length && !sessionStat?.datachannels?.length) {
     return c.text('session not found', 404)
   }
+  // use offer to create recvonly track
   const playerSdp = await c.req.text()
-  const request = createTracksRequest(playerSdp, sessionStat.tracks, sid)
+  const request = createTracksRequest(playerSdp, sessionStat.tracks, whipSid)
 
-  // use new session
+  // create new sub session
   const session = await newSession(c.env.RTC_API_TOKEN)
-  sid = session.sessionId
+  const sid = session.sessionId
 
   const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
     method: 'POST',

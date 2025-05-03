@@ -20,6 +20,16 @@ function getSessionUrl(sid?: string | null) {
   return `${window.location.href}?sid=${sid}`
 }
 
+function getSessionApi(sid?: string | null) {
+  const hostUrl = new URL(window.location.href)
+  hostUrl.pathname = sid ? `api/sessions/${sid}` : 'api/sessions'
+  hostUrl.search = ''
+  return hostUrl.toString()
+}
+
+let whipDc: RTCDataChannel
+let bootstrapDc: RTCDataChannel
+let peer: RTCPeerConnection
 const originalRTCPeerConnection = window.RTCPeerConnection
 function patchPeerConnection() {
   // Create a new constructor function that wraps the original
@@ -27,15 +37,13 @@ function patchPeerConnection() {
     this: RTCPeerConnection,
     configuration?: RTCConfiguration
   ) {
-    const peer = new originalRTCPeerConnection(configuration)
-    const bootstrapDc = peer.createDataChannel('bootstrap')
-    if (bootstrapDc) {
-      bootstrapDc.onmessage = (ev) => {
-        console.log('bootstrap msg', ev)
-      }
-      bootstrapDc.onopen = () => {
-        console.log('bootstrap open')
-      }
+    peer = new originalRTCPeerConnection(configuration)
+    bootstrapDc = peer.createDataChannel('bootstrap')
+    bootstrapDc.onmessage = (ev) => {
+      console.log('bootstrap msg', ev)
+    }
+    bootstrapDc.onopen = () => {
+      console.log('bootstrap open')
     }
     return peer
   } as never
@@ -50,21 +58,20 @@ function patchPeerConnection() {
 
 async function initDataChannel(
   sid: string,
-  label: string,
-  location: 'local' | 'remote',
-  peer: RTCPeerConnection
+  peer: RTCPeerConnection,
+  remoteSid?: string | null,
 ): Promise<RTCDataChannel> {
-  const dcRes = await fetch(`${window.location.href}api/sessions/${sid}`, {
+  const dcRes = await fetch(getSessionApi(sid), {
     method: 'PATCH',
     body: JSON.stringify({
       dataChannels: [{
-        sessionId: sid,
-        location: location,
+        sessionId: remoteSid ?? sid,
+        location: remoteSid ? 'remote' : 'local',
         dataChannelName: 'whip',
       }]
     })
   }).then(res => res.json())
-  const dc = peer.createDataChannel(label, {
+  const dc = peer.createDataChannel('whip', {
     negotiated: true,
     id: dcRes.dataChannels[0].id
   })
@@ -94,7 +101,7 @@ function App() {
     }
   }
 
-  function play() {
+  async function play() {
     const video = getVideoElement()
     if (whepPlayer || !video || !sid?.length)
       return
@@ -109,17 +116,42 @@ function App() {
     setWHEPPlayer(player)
     setSession(sid)
 
-    const sourceUrl = new URL(window.location.href)
-    sourceUrl.pathname = `api/sessions/${sid}`
-    sourceUrl.search = ''
-
     player.on('no-media', () => {
       console.log('player media timeout occured')
       player.destroy()
       setWHEPPlayer(null)
       setSession(null)
     })
-    player.load(sourceUrl)
+    player.load(new URL(getSessionApi(sid))).then(() => {
+      if (!bootstrapDc || !peer)
+        return
+
+      function createWhipListener() {
+        const playerObj = player as never
+        const playerAdapter = playerObj['adapter'] as never
+        const resourceUlr = playerAdapter['resource'] as string
+        const playerSid = resourceUlr.split('/').pop()
+        console.log('player sid', playerSid)
+        if (!playerSid) return
+        initDataChannel(playerSid, peer, sid).then(dc => {
+          dc.onopen = () => {
+            console.log('whip listener open')
+          }
+          dc.onmessage = (ev) => {
+            console.log('whip listener msg', ev.data as string)
+          }
+        })
+      }
+
+      if (bootstrapDc.readyState == 'open') {
+        createWhipListener()
+      } else {
+        bootstrapDc.onopen = () => {
+          console.log('bootstarp open 2')
+          createWhipListener()
+        }
+      }
+    })
   }
 
   async function deleteSession() {
@@ -159,7 +191,7 @@ function App() {
     console.log(`video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
 
     const client = new WHIPClient({
-      endpoint: `${window.location.href}api/sessions`,
+      endpoint: getSessionApi(),
       opts: {
         debug: true,
         noTrickleIce: true,
@@ -173,11 +205,10 @@ function App() {
           client.getResourceUrl().then(resUrl => {
             const sid = resUrl.split('/').pop()
             if (!sid) return
-            initDataChannel(sid, 'whip', 'local', peer).then(dc => {
-              console.log('dc whip ready')
+            initDataChannel(sid, peer).then(dc => {
               dc.onopen = () => {
-                console.log('dc whip open')
-                dc.send('hello')
+                whipDc = dc
+                console.log('whip dc open')
               }
             })
           })
@@ -266,7 +297,11 @@ function App() {
         <div className='control-button-container' >
           <button className='control-bt'
             onClick={async () => {
-              fetch(`${window.location.href}api/sessions/${session}`)
+              fetch(getSessionApi(session))
+              if (whipDc) {
+                console.log('whip dc send msg')
+                whipDc.send('hello 123')
+              }
             }}
           >
             Info
