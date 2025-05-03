@@ -141,6 +141,18 @@ app.post('/api/sessions', async (c) => {
 
 app.patch('/api/sessions/:sid', async (c) => {
   const sid = c.req.param('sid')
+  if (c.req.header('Content-Type')?.indexOf('text/plain') != -1) {
+    const sdp = await c.req.text()
+    const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
+      method: 'POST',
+      body: JSON.stringify(createTracksRequest(sdp))
+    }).catch(err => {
+      return c.text('Error: ' + err, 500)
+    })
+    const tracksRes = await res.json() as TracksResponse
+    return c.text(tracksRes.sessionDescription?.sdp || '')
+  }
+
   const dcRequest = await c.req.json() as DataChannelsRequest
   if (!dcRequest?.dataChannels?.length) {
     return c.json({}, 403)
