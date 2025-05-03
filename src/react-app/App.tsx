@@ -20,6 +20,57 @@ function getSessionUrl(sid?: string | null) {
   return `${window.location.href}?sid=${sid}`
 }
 
+const originalRTCPeerConnection = window.RTCPeerConnection
+function patchPeerConnection() {
+  // Create a new constructor function that wraps the original
+  const patchedConstructor: typeof RTCPeerConnection = function(
+    this: RTCPeerConnection,
+    configuration?: RTCConfiguration
+  ) {
+    const peer = new originalRTCPeerConnection(configuration)
+    const bootstrapDc = peer.createDataChannel('bootstrap')
+    if (bootstrapDc) {
+      bootstrapDc.onmessage = (ev) => {
+        console.log('bootstrap msg', ev)
+      }
+      bootstrapDc.onopen = () => {
+        console.log('bootstrap open')
+      }
+    }
+    return peer
+  } as never
+
+  // Copy over the prototype and static methods
+  patchedConstructor.prototype = originalRTCPeerConnection.prototype
+  patchedConstructor.generateCertificate = originalRTCPeerConnection.generateCertificate
+
+  // Replace the global RTCPeerConnection
+  window.RTCPeerConnection = patchedConstructor;
+}
+
+async function initDataChannel(
+  sid: string,
+  label: string,
+  location: 'local' | 'remote',
+  peer: RTCPeerConnection
+): Promise<RTCDataChannel> {
+  const dcRes = await fetch(`${window.location.href}api/sessions/${sid}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      dataChannels: [{
+        sessionId: sid,
+        location: location,
+        dataChannelName: 'whip',
+      }]
+    })
+  }).then(res => res.json())
+  const dc = peer.createDataChannel(label, {
+    negotiated: true,
+    id: dcRes.dataChannels[0].id
+  })
+  return dc
+}
+
 function App() {
   const [session, setSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
@@ -30,11 +81,12 @@ function App() {
   useEffect(() => {
     if (!_firstLoad) return
     _firstLoad = false
+    patchPeerConnection()
     play()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
 
-  async function stop() {
+  function stop() {
     if (whepPlayer) {
       whepPlayer.destroy()
       setWHEPPlayer(null)
@@ -68,7 +120,6 @@ function App() {
       setSession(null)
     })
     player.load(sourceUrl)
-    video.controls = true
   }
 
   async function deleteSession() {
@@ -80,29 +131,6 @@ function App() {
         setSession(null)
       }
     }
-  }
-
-  async function initDataChannel(
-    sid: string,
-    label: string,
-    location: 'local' | 'remote',
-    peer: RTCPeerConnection
-  ): Promise<RTCDataChannel> {
-    const dcRes = await fetch(`${window.location.href}api/sessions/${sid}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        dataChannels: [{
-          sessionId: sid,
-          location: location,
-          dataChannelName: 'whip',
-        }]
-      })
-    }).then(res => res.json())
-    const dc = peer.createDataChannel(label, {
-      negotiated: true,
-      id: dcRes.dataChannels[0].id
-    })
-    return dc
   }
 
   async function createSession(shareScreen?: boolean) {
@@ -139,11 +167,9 @@ function App() {
       },
       peerConnectionFactory: (config: RTCConfiguration) => {
         const peer = new RTCPeerConnection(config)
-        const bootDc = peer.createDataChannel('bootstrap')
-        bootDc.onmessage = (ev) => {
-          console.log('dc msg', ev)
-        }
-        bootDc.onopen = () => {
+        peer.addEventListener('connectionstatechange', () => {
+          if (peer.connectionState != 'connected')
+            return
           client.getResourceUrl().then(resUrl => {
             const sid = resUrl.split('/').pop()
             if (!sid) return
@@ -155,9 +181,9 @@ function App() {
               }
             })
           })
-        }
-        peer.addEventListener('connectionstatechange', () => {
-          if (peer.connectionState != 'connected' || !videoTrack) {
+
+          if (!videoTrack) {
+            console.log('no video track')
             return
           }
           const sender = peer.getSenders().find(s => s.track?.id == videoTrack.id)

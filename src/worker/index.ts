@@ -182,6 +182,9 @@ app.post('/api/sessions/:sid', async (c) => {
     body: JSON.stringify(request)
   })
   const joinRes = await res.json() as TracksResponse
+  c.header('Location', `sessions/${sid}`)
+  c.header('Access-Control-Expose-Headers', 'Location')
+  c.header('Access-Control-Allow-Origin', '*')
   return c.text(joinRes.sessionDescription.sdp, 201)
 })
 
