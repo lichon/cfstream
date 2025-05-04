@@ -27,6 +27,8 @@ const PLAYER_LOG = 'Player'
 const CMD_LIST = new Set<string>(['/hide', '/log'])
 const ttsPlayer = new ChromeTTS()
 
+const videoMaxBitrate = 2000000
+
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
 }
@@ -307,7 +309,7 @@ function App() {
       console.log(STREAMER_LOG, 'set sender maxBitrate')
       const params = sender.getParameters()
       params.encodings = [{
-        maxBitrate: 1000000,
+        maxBitrate: videoMaxBitrate,
       }]
       sender.setParameters(params)
     } else {
@@ -328,7 +330,9 @@ function App() {
       })
     } else {
       ret = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: {
+          frameRate: { ideal: 30 },
+        },
         audio: { deviceId: 'communications' },
       })
     }
@@ -356,7 +360,7 @@ function App() {
       throw Error('video tag not found')
 
     addChatMessage('getting media from user')
-    const mediaStream = await getMediaStream(shareScreen) 
+    const mediaStream = await getMediaStream(shareScreen)
     const videoTrack = mediaStream.getVideoTracks().find(t => t.enabled)
     console.log(STREAMER_LOG, `video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
 
