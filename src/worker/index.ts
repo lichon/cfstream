@@ -21,6 +21,12 @@ interface Track {
   sessionId?: string
 }
 
+interface DataChannel {
+  location: 'local' | 'remote'
+  sessionId: string
+  dataChannelName: string
+}
+
 interface SessionDescription {
   sdp: string
   type?: 'offer' | 'answer'
@@ -40,16 +46,10 @@ interface TracksRequest {
 
 interface SessionStatus {
   tracks: Track[]
-  datachannels: Track[]
+  datachannels: DataChannel[]
   subs: string[]
   errorCode?: string
   errorDescription?: string
-}
-
-interface DataChannel {
-  location: 'local' | 'remote'
-  sessionId: string
-  dataChannelName: string
 }
 
 interface PatchRequest {
@@ -118,6 +118,7 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/api', (c) => c.text(randomUUID()))
 
+// api create session
 app.post('/api/sessions', async (c) => {
   const sdp = await c.req.text()
   const session = await newSession(c.env.RTC_API_TOKEN)
@@ -145,25 +146,24 @@ app.post('/api/sessions', async (c) => {
   return c.text(tracksRes.sessionDescription?.sdp || '')
 })
 
-// bind dc for session
+// api patch session, bind dc to session
 app.patch('/api/sessions/:sid', async (c) => {
+  // TODO check session's secret
   const sid = c.req.param('sid')
   if (c.req.header('Content-Type')?.indexOf('text/plain') != -1) {
     const sessionStatus = await getSessionStatus(c.env.RTC_API_TOKEN, sid)
-    if (sessionStatus.datachannels.length || sessionStatus.tracks.length) {
-      return c.status(403)
+    if (sessionStatus.datachannels?.length || sessionStatus.tracks?.length) {
+      return c.text('', 403)
     }
 
-    // this would disconnect the session
+    // const kickBySubSession = c.req.header('X-Sub-Session')
+    // this would break the session's ice connection by cf sfu
     const sdp = await c.req.text()
-    const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
+    await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
       method: 'POST',
       body: JSON.stringify(createTracksRequest(sdp))
-    }).catch(_ => {
-      return c.text('new tracks error', 500)
     })
-    const tracksRes = await res.json() as TracksResponse
-    return c.text(tracksRes.sessionDescription?.sdp || '')
+    return c.text('ok', 201)
   }
 
   const patch = await c.req.json() as PatchRequest
@@ -186,27 +186,28 @@ app.patch('/api/sessions/:sid', async (c) => {
     const jsonRes = await res.json()
     return c.json(jsonRes || {})
   }
-  return c.status(403)
+  return c.json({}, 403)
 })
 
-// delete session
-app.delete('/api/sessions/:signal/:sid', async (c) => {
+// api delete session
+app.delete('/api/sessions/:secret/:sid', async (c) => {
   const sid = c.req.param('sid')
-  const signal = c.req.param('signal')
-  const sessionSignal = await getSessionSecret(c.env.KVASA, sid)
-  if (!sid || signal !== sessionSignal) {
-    return c.status(403)
+  const secret = c.req.param('secret')
+  const sessionSecret = await getSessionSecret(c.env.KVASA, sid)
+  // check secret for session
+  if (!sid || secret !== sessionSecret) {
+    return c.json({}, 403)
   }
-  // TODO check signal sid for session
+
   if (c.env.WEB_HOOK?.length) {
     await sendWebHook(c.env.WEB_HOOK, `session end ${sid}`)
   }
   await delSessionSecret(c.env.KVASA, sid)
   console.log('delete session', sid)
-  return c.json({})
+  return c.json({}, 200)
 })
 
-// play session
+// api play session
 app.post('/api/sessions/:sid', async (c) => {
   const whipSid = c.req.param('sid')
   const sessionStat = await getSessionStatus(c.env.RTC_API_TOKEN, whipSid)
@@ -227,8 +228,8 @@ app.post('/api/sessions/:sid', async (c) => {
   })
   const joinRes = await res.json() as TracksResponse
 
-  // save new sub session
-  await putSessionSubscriber(c.env.KVASA, whipSid, sid)
+  // save new sub to session
+  await putSessionSubs(c.env.KVASA, whipSid, sid)
 
   c.header('Location', `sessions/sub/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
@@ -236,43 +237,42 @@ app.post('/api/sessions/:sid', async (c) => {
   return c.text(joinRes.sessionDescription.sdp, 201)
 })
 
+// api get session info
 app.get('/api/sessions/:sid', async (c) => {
   const sid = c.req.param('sid')
   if (!sid?.length || sid === 'null' || sid === 'undefined') {
-    return c.status(404)
+    return c.json({}, 404)
   }
-  const subs = await getSessionSubscribers(c.env.KVASA, sid)
-  const subsList = JSON.parse(subs || '[]') as string[]
+  const subs = await getSessionSubs(c.env.KVASA, sid)
   const status = await getSessionStatus(c.env.RTC_API_TOKEN, sid)
-  status.subs = subsList
+  status.subs = subs ? [subs] : []
   return c.json(status)
 })
 
+// session secret caches
 async function delSessionSecret(kv: KVNamespace, sid: string) {
-  return await kv.delete('secret_' + sid)
+  return await kv.delete('secret:' + sid)
 }
 
 async function getSessionSecret(kv: KVNamespace, sid: string) {
-  return await kv.get('secret_' + sid)
+  return await kv.get('secret:' + sid)
 }
 
-async function putSessionSecret(kv: KVNamespace, sid: string, signal: string) {
-  await kv.put('secret_' + sid, signal)
+async function putSessionSecret(kv: KVNamespace, sid: string, secret: string) {
+  await kv.put('secret:' + sid, secret)
 }
 
-async function getSessionSubscribers(kv: KVNamespace, sid: string) {
-  const key = 'subs_' + sid
-  return await kv.get(key)
+// session subs cache
+async function getSessionSubs(kv: KVNamespace, sid: string) {
+  return await kv.get('subs:' + sid)
 }
 
-async function putSessionSubscriber(kv: KVNamespace, sid: string, signalSid: string) {
-  const currentSignals = await getSessionSubscribers(kv, sid)
-  const existingSignals = JSON.parse(currentSignals || '[]') as string[]
-  const signals = existingSignals.concat([signalSid])
-  const key = 'subs_' + sid
-  await kv.put(key, JSON.stringify(signals))
+async function putSessionSubs(kv: KVNamespace, sid: string, subSid: string) {
+  // TODO support multiple subs, maybe use kv.list with key prefix
+  await kv.put('subs:' + sid, subSid, { expirationTtl: 600 })
 }
 
+// session utils
 async function newSession(token: string, offer?: SessionDescription) {
   const res = await rtcApi(token, `/sessions/new`, {
     method: 'POST',
@@ -288,6 +288,7 @@ async function getSessionStatus(token: string, sid: string) {
   return await res.json() as SessionStatus
 }
 
+// sdp experiment
 interface MediaSdp {
   m: string
   sendOrRecv: string

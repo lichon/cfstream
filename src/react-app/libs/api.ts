@@ -1,7 +1,30 @@
 // API服务封装
 const API_BASE = '/api/sessions';
 
+export type SignalType = 'signalsession' | 'message' | 'action'
+
 export const STUN_SERVERS = [{ urls: 'stun:stun.cloudflare.com:3478' }]
+
+interface Track {
+  location: 'local' | 'remote'
+  mid?: string
+  trackName: string
+  sessionId?: string
+}
+
+interface DataChannel {
+  location: 'local' | 'remote'
+  sessionId: string
+  dataChannelName: string
+}
+
+interface SessionStatus {
+  tracks: Track[]
+  datachannels: DataChannel[]
+  subs: string[]
+  errorCode?: string
+  errorDescription?: string
+}
 
 export interface DataChannelConfig {
   sessionId: string;
@@ -49,12 +72,11 @@ export async function createSession(offerSdp: string | undefined): Promise<NewSe
   }
 }
 
-export async function kickSession(sid: string, sdp: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/${sid}`, {
+export async function kickSignalSession(sid: string, sdp: string): Promise<Response> {
+  return fetch(`${API_BASE}/${sid}`, {
     method: 'PATCH',
     body: sdp
-  });
-  return res.text()
+  })
 }
 
 export async function createDataChannel(
@@ -71,7 +93,7 @@ export async function createDataChannel(
   return res.json()
 }
 
-export async function getSessionInfo(sid: string): Promise<unknown> {
+export async function getSessionInfo(sid: string): Promise<SessionStatus> {
   const res = await fetch(`${API_BASE}/${sid}`);
   return res.json();
 }

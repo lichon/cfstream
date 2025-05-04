@@ -1,26 +1,27 @@
 import {
   STUN_SERVERS,
-  kickSession,
+  kickSignalSession,
   createSession,
   initDataChannel,
+  SignalType,
 } from './api'
 
-interface DataChannelConfig {
+interface SignalPeerConfig {
     iceServers?: RTCIceServer[];
+    autoStart?: boolean;
 }
 
-interface SignalEvent {
-    type: string;
-    event: unknown;
-}
-
-type MessageCallback = (message: unknown) => void;
+type MessageCallback = (message: MessageEvent) => void;
 type StatusCallback = () => void;
 
-class SignalPeer {
+export interface SignalEvent {
+    type: SignalType;
+    content: never;
+}
+
+export class SignalPeer {
     private peerConnection: RTCPeerConnection | null = null;
-    private bootstrapDc: RTCDataChannel | null;
-    private config: DataChannelConfig;
+    private config: SignalPeerConfig;
     private signalDc: RTCDataChannel | null;
     private onMessageCallback: MessageCallback | null;
     private onOpenCallback: StatusCallback | null;
@@ -31,33 +32,29 @@ class SignalPeer {
     private sessionId: string | undefined;
     private connected: boolean;
 
-    constructor(config: DataChannelConfig = { iceServers: STUN_SERVERS }) {
+    constructor(config: SignalPeerConfig = { iceServers: STUN_SERVERS }) {
         this.config = config;
         this.peerConnection = null;
-        this.bootstrapDc = null;
         this.signalDc = null;
+        this.connected = false;
         this.onMessageCallback = null;
         this.onOpenCallback = null;
         this.onCloseCallback = null;
         this.onErrorCallback = null;
         this.onConnectionStateCallback = null;
-        this.connected = false;
     }
 
     async connect() {
         try {
-            this.peerConnection = new RTCPeerConnection(this.config);
-            this.bootstrapDc = (this.peerConnection as never)['bootstrapDc'] as RTCDataChannel;
-            this._setupDataChannelHandlers();
-            const offer = await this.peerConnection.createOffer();
-            await this.peerConnection.setLocalDescription(offer);
+            const peer = this._initPeer();
+            const offer = await peer.createOffer();
+            await peer.setLocalDescription(offer);
             const res = await createSession(offer.sdp)
             if (!res?.sessionDescription) {
                 throw new Error('failed to create session')
             }
-
             this.sessionId = res?.sessionId
-            await this.peerConnection.setRemoteDescription(res?.sessionDescription.toJSON())
+            await peer.setRemoteDescription(res?.sessionDescription.toJSON())
         } catch (e) {
             console.log('connect failed', e)
             if (this.onErrorCallback) {
@@ -66,10 +63,22 @@ class SignalPeer {
         }
     }
 
-    static async kick(session: string) {
+    static async kick(session: string) : Promise<boolean> {
         const sdp = (await new RTCPeerConnection().createOffer()).sdp
-        await kickSession(session, sdp || '');
+        const res = await kickSignalSession(session, sdp || '');
+        return res.status == 201
     }
+
+    sendEvent(event: SignalEvent): boolean {
+        if (this.isSubscriber() || !this.signalDc || !this.connected) {
+            return false
+        }
+        if (this.signalDc.readyState == 'open') {
+            this.signalDc.send(JSON.stringify(event))
+            return true
+        }
+        return false
+    } 
 
     isSubscriber(): boolean {
         return !!this.remoteSid
@@ -83,75 +92,59 @@ class SignalPeer {
         return this.sessionId
     }
 
-    initSignalDc(remoteSid: string | undefined) {
-        if (!this.connected || !this.peerConnection) return
-        this.remoteSid = remoteSid
-        initDataChannel(this.sessionId || '', this.peerConnection, remoteSid, 'signal').then(signalDc => {
+    setRemoteSid(sid?: string): void {
+        // auto start to connect signal to remote
+        this.config.autoStart = !!sid
+        this.remoteSid = sid
+    }
+
+    startSignalDc() {
+        if (!this.connected || !this.peerConnection) {
+            console.error('init signal without connected')
+            return
+        }
+        initDataChannel(this.sessionId || '', this.peerConnection, this.remoteSid, 'signal').then(signalDc => {
             this.signalDc = signalDc
             signalDc.onclose = () => {
+                this.setRemoteSid()
                 console.log('SignalDc', 'close')
+                if (this.onCloseCallback) {
+                    this.onCloseCallback()
+                }
             }
             signalDc.onopen = () => {
                 console.log('SignalDc', 'open')
+                if (this.onOpenCallback) {
+                    this.onOpenCallback()
+                }
+            }
+            signalDc.onmessage = (ev) => {
+                console.log('SignalDc', `message ${ev}`)
+                if (this.onMessageCallback) {
+                    this.onMessageCallback(ev)
+                }
             }
         })
     }
 
-    publishEvent(signal: SignalEvent): boolean {
-        if (this.isSubscriber() || !this.signalDc || !this.connected) {
-            return false
-        }
-        if (this.signalDc.readyState == 'open') {
-            this.signalDc.send(JSON.stringify(signal))
-            return true
-        }
-        return false
-    } 
-
-    private _setupDataChannelHandlers(): void {
-        if (!this.peerConnection) return
-
-        const peer = this.peerConnection
+    private _initPeer(): RTCPeerConnection {
+        const peer = new RTCPeerConnection(this.config)
         peer.onconnectionstatechange = () => {
             const lastConnected = this.connected
             this.connected = peer.connectionState == 'connected'
-            console.log('SignalPeer', `connection state ${peer?.connectionState}`)
+            console.log('SignalPeer', `${this.sessionId} ${peer?.connectionState}`)
+            if (!this.connected && this.connected != lastConnected) {
+                this.close()
+            }
             if (this.onConnectionStateCallback && this.connected != lastConnected) {
                 this.onConnectionStateCallback()
             }
-            if (peer.connectionState == 'failed') {
-                this.close()
-                if (this.onErrorCallback) {
-                    this.onErrorCallback()
-                }
+            if (this.connected && this.config.autoStart) {
+                this.startSignalDc()
             }
         }
-
-        if (!this.bootstrapDc) return
-
-        this.bootstrapDc.onmessage = (event: MessageEvent) => {
-            console.log('SignalPeer', 'message')
-            if (this.onMessageCallback) {
-                this.onMessageCallback(event.data);
-            }
-        };
-
-        this.bootstrapDc.onopen = () => {
-            this.connected = true
-            console.log('SignalPeer', 'open')
-            if (this.onOpenCallback) {
-                this.onOpenCallback();
-            }
-            // this.initSignalDc()
-        };
-
-        this.bootstrapDc.onclose = () => {
-            this.connected = false
-            console.log('SignalPeer', 'close')
-            if (this.onCloseCallback) {
-                this.onCloseCallback();
-            }
-        };
+        this.peerConnection = peer
+        return peer
     }
 
     onConnectionStateChanged(callback: StatusCallback): void {
@@ -175,11 +168,12 @@ class SignalPeer {
     }
 
     close(): void {
-        this.bootstrapDc?.close();
+        if (this.signalDc) {
+            this.signalDc.close()
+        }
         if (this.peerConnection) {
-            this.peerConnection.close();
+            this.peerConnection.close()
+            this.peerConnection = null
         }
     }
 }
-
-export default SignalPeer;

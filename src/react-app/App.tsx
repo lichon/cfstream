@@ -7,7 +7,7 @@ import { WHIPClient } from '@eyevinn/whip-web-client'
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
-import SignalPeer from './libs/signalpeer'
+import { SignalPeer, SignalEvent } from './libs/signalpeer'
 import {
   initDataChannel,
   getSessionInfo,
@@ -33,12 +33,6 @@ function patchPeerConnection() {
   ) {
     const peer = new originalRTCPeerConnection(configuration)
     const bootstrapDc = peer.createDataChannel('bootstrap')
-    bootstrapDc.onmessage = (ev) => {
-      console.log('bootstrap msg', ev)
-    }
-    bootstrapDc.onopen = () => {
-      console.log('bootstrap open')
-    }
     Object.defineProperty(peer, 'bootstrapDc', {
       enumerable: true,
       configurable: false,
@@ -59,11 +53,11 @@ function patchPeerConnection() {
 function App() {
   const [session, setSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
-  const [whipDc, setWHIPDc] = useState<RTCDataChannel | null>()
   const [whepPlayer, setWHEPPlayer] = useState<WebRTCPlayer | null>()
   const [qrVisible, setQrVisible] = useState(false)
   const [showHoverMenu, setShowHoverMenu] = useState(false)
   const [signalPeer, setSignalPeer] = useState<SignalPeer | null>()
+  const [playerSignalDc, setPlayerSignalDc] = useState<RTCDataChannel | null>()
 
   useEffect(() => {
     if (!_firstLoad) return
@@ -78,6 +72,7 @@ function App() {
       whepPlayer.destroy()
       setWHEPPlayer(null)
       setSession(null)
+      setPlayerSignalDc(null)
     }
   }
 
@@ -101,6 +96,7 @@ function App() {
       player.destroy()
       setWHEPPlayer(null)
       setSession(null)
+      setPlayerSignalDc(null)
     })
     player.load(new URL(getSessionUrl(sidParam))).then(() => {
       const playerObj = player as never
@@ -109,59 +105,151 @@ function App() {
       const bootstrapDc = anyPeer['bootstrapDc'] as RTCDataChannel
       const peer = anyPeer as RTCPeerConnection
 
-      function createWhipListener() {
+      function createSignalDc() {
         const resourceUrl = playerAdapter['resource'] as string
         const playerSid = extractSessionIdFromUrl(resourceUrl)
-        console.log('player sid', playerSid)
+        if (!playerSid) return
+        initDataChannel(playerSid, peer, null, 'signal').then(dc => {
+          dc.onopen = () => {
+            console.log('signalDc open')
+          }
+          setPlayerSignalDc(dc)
+        })
+      }
+
+      function createBroadcastListener() {
+        const resourceUrl = playerAdapter['resource'] as string
+        const playerSid = extractSessionIdFromUrl(resourceUrl)
         if (!playerSid) return
         initDataChannel(playerSid, peer, sidParam).then(dc => {
+          const kickedSid = new Set<string>()
           dc.onopen = () => {
-            console.log('whip listener open')
+            console.log('broadcast listener open')
           }
-          dc.onmessage = (ev) => {
-            console.log('whip listener msg', ev.data as string)
+          dc.onmessage = async (ev) => {
+            console.log('broadcast listener msg', ev.data as string)
+            const event = JSON.parse(ev.data) as SignalEvent
+            if (event.type == 'signalsession') {
+              if (kickedSid.has(event.content)) return
+              if (await SignalPeer.kick(event.content)) {
+                kickedSid.add(event.content)
+              }
+            }
           }
         })
       }
 
       if (bootstrapDc.readyState == 'open') {
-        createWhipListener()
+        createSignalDc()
+        createBroadcastListener()
       } else {
         bootstrapDc.onopen = () => {
-          console.log('bootstarp open 2')
-          createWhipListener()
+          console.log('player bootstarp open')
+          createSignalDc()
+          createBroadcastListener()
         }
       }
     })
   }
 
   function broadcastSignalSid(signalPeer: SignalPeer, broadcastDc: RTCDataChannel) {
-    if (signalPeer.isConnected()) {
+    if (signalPeer.isConnected() && !signalPeer.isSubscriber()) {
       const signalSid = signalPeer.getSessionId()
-      console.log('broadcast signal sid', signalSid)
+      // console.log('broadcast signal', signalSid)
       broadcastDc.send(JSON.stringify({
-        type: 'signal',
-        sessionId: signalSid
+        type: 'signalsession',
+        content: signalSid,
       }))
       setTimeout(() => broadcastSignalSid(signalPeer, broadcastDc), 5000)
     }
   }
 
-  function initSignalPeer(clientBroadcastDc: RTCDataChannel) {
+  function initSignalPeer(client: WHIPClient, broadcastDc: RTCDataChannel) {
     const signalPeer = new SignalPeer()
-    setSignalPeer(signalPeer)
-
     signalPeer.onConnectionStateChanged(() => {
-      if (!signalPeer.isConnected()) {
-        // TODO create new connection
+      if (signalPeer.isConnected()) {
+        // new signal connected, broadcast self to subs
+        broadcastSignalSid(signalPeer, broadcastDc)
+      } else {
+        // signal disconnected, connect signal to new sub
+        client.getResourceUrl().then(resUrl => {
+          const sid = resUrl.split('/').pop()
+          return getSessionInfo(sid || '')
+        }).then(info => {
+          if (info?.subs?.length) {
+            // TODO support multiple subs
+            signalPeer.setRemoteSid(info.subs[0])
+          }
+          signalPeer.connect()
+        })
       }
     })
-    signalPeer.onOpen(() => {
-      const signalSession = signalPeer.getSessionId() as string
-      if (!signalSession) return
-      broadcastSignalSid(signalPeer, clientBroadcastDc)
+    signalPeer.onClose(() => {
+      // reset subs
+      signalPeer.setRemoteSid()
+      // sub dc closed, restart to brocasting mode
+      signalPeer.connect()
     })
+    signalPeer.onMessage((ev) => {
+      console.log('recv subs msg', ev.data)
+      if (broadcastDc && broadcastDc.readyState == 'open') {
+        // TODO broadcast received msg to all subs
+        broadcastDc.send(ev.data)
+      }
+    })
+    setSignalPeer(signalPeer)
     signalPeer.connect()
+  }
+
+  function initBroadcastDc(client: WHIPClient, peer: RTCPeerConnection) {
+    client.getResourceUrl().then(resUrl => {
+      const sid = resUrl.split('/').pop()
+      if (!sid) return
+      initDataChannel(sid, peer).then(dc => {
+        dc.onopen = () => {
+          console.log('broadcastDc open')
+          initSignalPeer(client, dc)
+        }
+      })
+    })
+  }
+
+  function setVideoBitrate(peer: RTCPeerConnection, videoTrack?: MediaStreamTrack) {
+    if (!videoTrack) {
+      console.log('no video track')
+      return
+    }
+    const sender = peer.getSenders().find(s => s.track?.id == videoTrack.id)
+    if (sender) {
+      console.log('set sender params')
+      const params = sender.getParameters()
+      params.encodings = [{
+        maxBitrate: 1000000,
+      }]
+      sender.setParameters(params)
+    } else {
+      console.log('failed to get sender', peer)
+    }
+  }
+
+  async function getMediaStream(shareScreen?: boolean) {
+    let ret
+    if (shareScreen && navigator.mediaDevices.getDisplayMedia) {
+      ret = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 60 },
+        },
+        audio: true,
+      })
+    } else {
+      ret = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: { deviceId: 'communications' },
+      })
+    }
+    return ret
   }
 
   async function stopStream() {
@@ -184,23 +272,7 @@ function App() {
     if (!video)
       throw Error('video tag not found')
 
-    let mediaStream
-    if (shareScreen && navigator.mediaDevices.getDisplayMedia) {
-      mediaStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 60 },
-        },
-        audio: true,
-      })
-    } else {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: { deviceId: 'communications' },
-      })
-    }
-    video.srcObject = mediaStream
+    const mediaStream = await getMediaStream(shareScreen) 
     const videoTrack = mediaStream.getVideoTracks().find(t => t.enabled)
     console.log(`video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
 
@@ -216,40 +288,15 @@ function App() {
         peer.addEventListener('connectionstatechange', () => {
           if (peer.connectionState != 'connected')
             return
-
-          client.getResourceUrl().then(resUrl => {
-            const sid = resUrl.split('/').pop()
-            if (!sid) return
-            initDataChannel(sid, peer).then(dc => {
-              setWHIPDc(dc)
-              dc.onopen = () => {
-                console.log('whipDc open')
-              }
-              initSignalPeer(dc)
-            })
-          })
-
-          if (!videoTrack) {
-            console.log('no video track')
-            return
-          }
-          const sender = peer.getSenders().find(s => s.track?.id == videoTrack.id)
-          if (sender) {
-            console.log('set sender params')
-            const params = sender.getParameters()
-            params.encodings = [{
-              maxBitrate: 1000000,
-            }]
-            sender.setParameters(params)
-          } else {
-            console.log('failed to get sender', peer)
-          }
+          initBroadcastDc(client, peer)
+          setVideoBitrate(peer, videoTrack)
         })
         return peer
       }
     })
     await client.setIceServersFromEndpoint()
     await client.ingest(mediaStream)
+    video.srcObject = mediaStream
     const resourceUrl = await client.getResourceUrl()
     setSession(extractSessionIdFromUrl(resourceUrl))
     setWHIPClient(client)
@@ -314,9 +361,9 @@ function App() {
           <button className='control-bt'
             onClick={async () => {
               getSessionInfo(session!)
-              if (whipDc && whipDc.readyState == 'open') {
-                console.log('dc send msg')
-                whipDc.send('hello 123')
+              if (playerSignalDc && playerSignalDc.readyState == 'open') {
+                console.log('player dc send msg')
+                playerSignalDc.send(JSON.stringify({ type: 'message', content: 'hello' }))
               }
             }}
           >
