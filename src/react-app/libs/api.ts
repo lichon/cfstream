@@ -10,8 +10,26 @@ export interface DataChannelConfig {
 }
 
 export interface NewSessionResponse {
-  sessionId: string
-  sessionDescription?: RTCSessionDescription
+  sessionId: string;
+  sessionDescription?: RTCSessionDescription;
+}
+
+export function extractSessionIdFromUrl(url: string | null): string | undefined {
+  return url ? url.split('/').pop() : undefined;
+}
+
+export function getSessionUrl(sid?: string | null): string {
+  const url = new URL(window.location.href);
+  url.pathname = sid ? `${API_BASE}/${sid}` : API_BASE;
+  url.search = '';
+  return url.toString();
+}
+
+export function getPlayerUrl(sid?: string | null): string {
+  const url = new URL(window.location.href);
+  url.pathname = '/play';
+  url.search = `?sid=${sid}`;
+  return url.toString();
 }
 
 export async function createSession(offerSdp: string | undefined): Promise<NewSessionResponse | null> {
@@ -56,17 +74,6 @@ export async function createDataChannel(
 export async function getSessionInfo(sid: string): Promise<unknown> {
   const res = await fetch(`${API_BASE}/${sid}`);
   return res.json();
-}
-
-export function getSessionApiUrl(sid?: string | null): string {
-  const url = new URL(window.location.href);
-  url.pathname = sid ? `${API_BASE}/${sid}` : API_BASE;
-  url.search = '';
-  return url.toString();
-}
-
-export function extractSessionIdFromUrl(url: string | null): string | undefined {
-  return url ? url.split('/').pop() : undefined;
 }
 
 export async function initDataChannel(

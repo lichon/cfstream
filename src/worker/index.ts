@@ -51,8 +51,9 @@ interface DataChannel {
   dataChannelName: string
 }
 
-interface DataChannelsRequest {
-  dataChannels: DataChannel[]
+interface PatchRequest {
+  dataChannels?: DataChannel[]
+  tracks?: Track[]
 }
 
 // Add this helper function at the top of the file after the imports
@@ -142,6 +143,11 @@ app.post('/api/sessions', async (c) => {
 app.patch('/api/sessions/:sid', async (c) => {
   const sid = c.req.param('sid')
   if (c.req.header('Content-Type')?.indexOf('text/plain') != -1) {
+    const sessionStat = await getSessionTracks(c.env.RTC_API_TOKEN, sid)
+    if (sessionStat.datachannels.length || sessionStat.tracks.length) {
+      return c.text('invalid session', 403)
+    }
+
     const sdp = await c.req.text()
     const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
       method: 'POST',
@@ -153,19 +159,27 @@ app.patch('/api/sessions/:sid', async (c) => {
     return c.text(tracksRes.sessionDescription?.sdp || '')
   }
 
-  const dcRequest = await c.req.json() as DataChannelsRequest
-  if (!dcRequest?.dataChannels?.length) {
-    return c.json({}, 403)
+  const patch = await c.req.json() as PatchRequest
+  if (patch?.dataChannels?.length) {
+    const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/datachannels/new`, {
+      method: 'POST',
+      body: JSON.stringify(patch)
+    }).catch(err => {
+      return c.text('Error: ' + err, 500)
+    })
+    const jsonRes = await res.json()
+    return c.json(jsonRes || {})
+  } else if (patch?.tracks?.length) {
+    const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
+      method: 'POST',
+      body: JSON.stringify(createTracksRequest('', patch.tracks, ))
+    }).catch(err => {
+      return c.text('Error: ' + err, 500)
+    })
+    const jsonRes = await res.json()
+    return c.json(jsonRes || {})
   }
-
-  const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/datachannels/new`, {
-    method: 'POST',
-    body: JSON.stringify(dcRequest)
-  }).catch(err => {
-    return c.text('Error: ' + err, 500)
-  })
-  const jsonRes = await res.json()
-  return c.json(jsonRes || {})
+  return c.json({}, 403)
 })
 
 app.delete('/api/sessions/:sid', async (c) => {

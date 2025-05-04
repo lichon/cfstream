@@ -11,7 +11,8 @@ import SignalPeer from './libs/signalpeer'
 import {
   initDataChannel,
   getSessionInfo,
-  getSessionApiUrl,
+  getSessionUrl,
+  getPlayerUrl,
   extractSessionIdFromUrl,
   STUN_SERVERS
 } from './libs/api'
@@ -21,10 +22,6 @@ const sidParam = new URLSearchParams(window.location.search).get('sid')
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
-}
-
-function getPlayerUrl(sid?: string | null) {
-  return `${window.location.href}?sid=${sid}`
 }
 
 const originalRTCPeerConnection = window.RTCPeerConnection
@@ -105,7 +102,7 @@ function App() {
       setWHEPPlayer(null)
       setSession(null)
     })
-    player.load(new URL(getSessionApiUrl(sidParam))).then(() => {
+    player.load(new URL(getSessionUrl(sidParam))).then(() => {
       const playerObj = player as never
       const playerAdapter = playerObj['adapter'] as never
       const anyPeer = playerAdapter['localPeer'] as never
@@ -150,11 +147,7 @@ function App() {
     }
   }
 
-  function initSignalPeer(
-    clientPeer: RTCPeerConnection,
-    clientSession: string,
-    clientBroadcastDc: RTCDataChannel
-  ) {
+  function initSignalPeer(clientBroadcastDc: RTCDataChannel) {
     const signalPeer = new SignalPeer()
     setSignalPeer(signalPeer)
 
@@ -167,32 +160,11 @@ function App() {
       const signalSession = signalPeer.getSessionId() as string
       if (!signalSession) return
       broadcastSignalSid(signalPeer, clientBroadcastDc)
-
-      setTimeout(() => {
-        new SignalPeer().kick(signalSession)
-      }, 10000)
-
-      // initDataChannel(clientSession, clientPeer, signalSession, 'signal').then(clientSignalDc => {
-      //   clientSignalDc.onclose = () => {
-      //     console.log('client signalDc close')
-      //   }
-      //   clientSignalDc.onopen = () => {
-      //     console.log('client signalDc open')
-      //     signalPeer.switchSignalDc()
-      //   }
-      //   clientSignalDc.onmessage = (ev) => {
-      //     console.log('client signalDc msg', ev)
-      //   }
-      // })
-    })
-    signalPeer.onClose(() => {
-    })
-    signalPeer.onMessage((_msg: unknown) => {
     })
     signalPeer.connect()
   }
 
-  async function deleteSession() {
+  async function stopStream() {
     if (whipClient) {
       try {
         await whipClient.destroy()
@@ -203,10 +175,11 @@ function App() {
     }
     if (signalPeer) {
       signalPeer.close()
+      setSignalPeer(null)
     }
   }
 
-  async function createSession(shareScreen?: boolean) {
+  async function startStream(shareScreen?: boolean) {
     const video = getVideoElement()
     if (!video)
       throw Error('video tag not found')
@@ -232,7 +205,7 @@ function App() {
     console.log(`video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
 
     const client = new WHIPClient({
-      endpoint: getSessionApiUrl(),
+      endpoint: getSessionUrl(),
       opts: {
         debug: true,
         noTrickleIce: true,
@@ -252,7 +225,7 @@ function App() {
               dc.onopen = () => {
                 console.log('whipDc open')
               }
-              initSignalPeer(peer, sid, dc)
+              initSignalPeer(dc)
             })
           })
 
@@ -286,13 +259,13 @@ function App() {
     <>
       <div id='control' className='control'>
         <div className='control-button-container'
-          onMouseEnter={() => setShowHoverMenu(!sidParam?.length && true)}
+          onMouseEnter={() => setShowHoverMenu(!sidParam?.length && !session)}
           onMouseLeave={() => setShowHoverMenu(false)}
         >
           <button className='control-bt'
             onClick={() => {
               if (session) {
-                deleteSession()
+                stopStream()
                 stop()
               } else {
                 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
@@ -305,13 +278,13 @@ function App() {
           {!session && showHoverMenu && (
             <div className='hover-menu'>
               <button
-                onClick={() => createSession(false)}
+                onClick={() => startStream(false)}
                 className='hover-menu-item'
               >
                 Start with Camera
               </button>
               <button
-                onClick={() => createSession(true)}
+                onClick={() => startStream(true)}
                 className='hover-menu-item'
               >
                 Start Screen Share
