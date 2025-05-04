@@ -38,11 +38,12 @@ interface TracksRequest {
   autoDiscover?: boolean
 }
 
-interface SessionStat {
+interface SessionStatus {
   tracks: Track[]
   datachannels: Track[]
-  errorCode: string
-  errorDescription: string
+  subs: string[]
+  errorCode?: string
+  errorDescription?: string
 }
 
 interface DataChannel {
@@ -54,6 +55,14 @@ interface DataChannel {
 interface PatchRequest {
   dataChannels?: DataChannel[]
   tracks?: Track[]
+}
+
+const randomUUID = () => {
+  const array = new Uint8Array(16)
+  crypto.getRandomValues(array)
+  array[6] = (array[6] & 0x0f) | 0x40 // Version 4
+  array[8] = (array[8] & 0x3f) | 0x80 // Variant 10
+  return [...array].map((b, i) => (i === 4 || i === 6 || i === 8 || i === 10 ? '-' : '') + b.toString(16).padStart(2, '0')).join('')
 }
 
 // Add this helper function at the top of the file after the imports
@@ -92,7 +101,7 @@ function createTracksRequest(sdp?: string, tracks?: Track[], sid?: string): Trac
   } as TracksRequest
 }
 
-const send_web_hook = async (hookURL: string, message: string) => {
+const sendWebHook = async (hookURL: string, message: string) => {
   return fetch(hookURL, {
     method: 'POST',
     headers: {
@@ -107,15 +116,7 @@ const send_web_hook = async (hookURL: string, message: string) => {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-app.get('/api/', (c) => c.json({ name: 'api' }))
-
-app.post('/api/kv/:key', async (c) => {
-  const key = c.req.param('key')
-  const value = await c.req.text()
-  await c.env.KVASA.put(key, value)
-  const v2 = await c.env.KVASA.get(key)
-  return c.text(`Key ${key} set to ${v2}`)
-})
+app.get('/api', (c) => c.text(randomUUID()))
 
 app.post('/api/sessions', async (c) => {
   const sdp = await c.req.text()
@@ -124,36 +125,42 @@ app.post('/api/sessions', async (c) => {
   const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
     method: 'POST',
     body: JSON.stringify(createTracksRequest(sdp))
-  }).catch(err => {
-    return c.text('Error: ' + err, 500)
+  }).catch(_ => {
+    return c.text('new tracks error', 500)
   })
+  const tracksRes = await res.json() as TracksResponse
 
   console.log('new session', sid)
   if (c.env.WEB_HOOK?.length) {
-    await send_web_hook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}_`)
+    await sendWebHook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}_`)
   }
 
-  const tracksRes = await res.json() as TracksResponse
-  c.header('Location', `sessions/${sid}`)
+  // create session secret
+  const secret = randomUUID()
+  await putSessionSecret(c.env.KVASA, sid, secret)
+
+  c.header('Location', `sessions/${secret}/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
   return c.text(tracksRes.sessionDescription?.sdp || '')
 })
 
+// bind dc for session
 app.patch('/api/sessions/:sid', async (c) => {
   const sid = c.req.param('sid')
   if (c.req.header('Content-Type')?.indexOf('text/plain') != -1) {
-    const sessionStat = await getSessionTracks(c.env.RTC_API_TOKEN, sid)
-    if (sessionStat.datachannels.length || sessionStat.tracks.length) {
-      return c.text('invalid session', 403)
+    const sessionStatus = await getSessionStatus(c.env.RTC_API_TOKEN, sid)
+    if (sessionStatus.datachannels.length || sessionStatus.tracks.length) {
+      return c.status(403)
     }
 
+    // this would disconnect the session
     const sdp = await c.req.text()
     const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
       method: 'POST',
       body: JSON.stringify(createTracksRequest(sdp))
-    }).catch(err => {
-      return c.text('Error: ' + err, 500)
+    }).catch(_ => {
+      return c.text('new tracks error', 500)
     })
     const tracksRes = await res.json() as TracksResponse
     return c.text(tracksRes.sessionDescription?.sdp || '')
@@ -164,8 +171,8 @@ app.patch('/api/sessions/:sid', async (c) => {
     const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/datachannels/new`, {
       method: 'POST',
       body: JSON.stringify(patch)
-    }).catch(err => {
-      return c.text('Error: ' + err, 500)
+    }).catch(_ => {
+      return c.text('new dc error', 500)
     })
     const jsonRes = await res.json()
     return c.json(jsonRes || {})
@@ -173,27 +180,36 @@ app.patch('/api/sessions/:sid', async (c) => {
     const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
       method: 'POST',
       body: JSON.stringify(createTracksRequest('', patch.tracks, ))
-    }).catch(err => {
-      return c.text('Error: ' + err, 500)
+    }).catch(_ => {
+      return c.text('new tracks error', 500)
     })
     const jsonRes = await res.json()
     return c.json(jsonRes || {})
   }
-  return c.json({}, 403)
+  return c.status(403)
 })
 
-app.delete('/api/sessions/:sid', async (c) => {
+// delete session
+app.delete('/api/sessions/:signal/:sid', async (c) => {
   const sid = c.req.param('sid')
-  if (c.env.WEB_HOOK?.length) {
-    await send_web_hook(c.env.WEB_HOOK, `session end ${sid}`)
+  const signal = c.req.param('signal')
+  const sessionSignal = await getSessionSecret(c.env.KVASA, sid)
+  if (!sid || signal !== sessionSignal) {
+    return c.status(403)
   }
+  // TODO check signal sid for session
+  if (c.env.WEB_HOOK?.length) {
+    await sendWebHook(c.env.WEB_HOOK, `session end ${sid}`)
+  }
+  await delSessionSecret(c.env.KVASA, sid)
   console.log('delete session', sid)
   return c.json({})
 })
 
+// play session
 app.post('/api/sessions/:sid', async (c) => {
   const whipSid = c.req.param('sid')
-  const sessionStat = await getSessionTracks(c.env.RTC_API_TOKEN, whipSid)
+  const sessionStat = await getSessionStatus(c.env.RTC_API_TOKEN, whipSid)
   if (!sessionStat?.tracks?.length && !sessionStat?.datachannels?.length) {
     return c.text('session not found', 404)
   }
@@ -210,7 +226,11 @@ app.post('/api/sessions/:sid', async (c) => {
     body: JSON.stringify(request)
   })
   const joinRes = await res.json() as TracksResponse
-  c.header('Location', `sessions/${sid}`)
+
+  // save new sub session
+  await putSessionSubscriber(c.env.KVASA, whipSid, sid)
+
+  c.header('Location', `sessions/sub/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
   return c.text(joinRes.sessionDescription.sdp, 201)
@@ -218,8 +238,40 @@ app.post('/api/sessions/:sid', async (c) => {
 
 app.get('/api/sessions/:sid', async (c) => {
   const sid = c.req.param('sid')
-  return c.json(await getSessionTracks(c.env.RTC_API_TOKEN, sid))
+  if (!sid?.length || sid === 'null' || sid === 'undefined') {
+    return c.status(404)
+  }
+  const subs = await getSessionSubscribers(c.env.KVASA, sid)
+  const subsList = JSON.parse(subs || '[]') as string[]
+  const status = await getSessionStatus(c.env.RTC_API_TOKEN, sid)
+  status.subs = subsList
+  return c.json(status)
 })
+
+async function delSessionSecret(kv: KVNamespace, sid: string) {
+  return await kv.delete('secret_' + sid)
+}
+
+async function getSessionSecret(kv: KVNamespace, sid: string) {
+  return await kv.get('secret_' + sid)
+}
+
+async function putSessionSecret(kv: KVNamespace, sid: string, signal: string) {
+  await kv.put('secret_' + sid, signal)
+}
+
+async function getSessionSubscribers(kv: KVNamespace, sid: string) {
+  const key = 'subs_' + sid
+  return await kv.get(key)
+}
+
+async function putSessionSubscriber(kv: KVNamespace, sid: string, signalSid: string) {
+  const currentSignals = await getSessionSubscribers(kv, sid)
+  const existingSignals = JSON.parse(currentSignals || '[]') as string[]
+  const signals = existingSignals.concat([signalSid])
+  const key = 'subs_' + sid
+  await kv.put(key, JSON.stringify(signals))
+}
 
 async function newSession(token: string, offer?: SessionDescription) {
   const res = await rtcApi(token, `/sessions/new`, {
@@ -229,11 +281,11 @@ async function newSession(token: string, offer?: SessionDescription) {
   return await res.json() as NewSessionResponse
 }
 
-async function getSessionTracks(token: string, sid: string) {
+async function getSessionStatus(token: string, sid: string) {
   const res = await rtcApi(token, `/sessions/${sid}`, {
     method: 'GET',
   })
-  return await res.json() as SessionStat
+  return await res.json() as SessionStatus
 }
 
 interface MediaSdp {
