@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export interface ChatMessage {
   text: string;
@@ -14,6 +14,15 @@ interface ChatOverlayProps {
 
 export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend }) => {
   const [inputMessage, setInputMessage] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +71,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend
                 <span style={{ color: '#fff' }}>{msg.text}</span>
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
             <input
