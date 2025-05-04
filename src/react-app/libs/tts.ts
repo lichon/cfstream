@@ -7,12 +7,10 @@ interface TTSOptions {
 
 export class ChromeTTS {
   private voices: SpeechSynthesisVoice[];
-  private currentUtterance: SpeechSynthesisUtterance | null;
   onVoicesLoaded: ((voices: SpeechSynthesisVoice[]) => void) | null;
 
   constructor() {
     this.voices = [];
-    this.currentUtterance = null;
     this.onVoicesLoaded = null;
 
     window.speechSynthesis.onvoiceschanged = () => {
@@ -48,7 +46,6 @@ export class ChromeTTS {
       utterance.onend = options.onEnd;
     }
 
-    this.currentUtterance = utterance;
     window.speechSynthesis.speak(utterance);
   }
 
