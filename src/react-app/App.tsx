@@ -461,16 +461,21 @@ function App() {
         </div>
         <div className='control-button-container' >
           <button className='control-bt'
-            onClick={async () => {
-              setLogVisible(!logVisible)
-            }}
+            onClick={() => { setLogVisible(!logVisible) }}
           >
             Logs
           </button>
         </div>
       </div>
       <div className='video-wrapper'>
-        <video id='video' autoPlay muted></video>
+        <video id='video' autoPlay muted
+          onClick={(ev) => {
+            const video = ev.target as HTMLVideoElement
+            if (video.paused) video.play()
+            else video.pause()
+          }}
+        >
+        </video>
       </div>
 
       <ChatOverlay
