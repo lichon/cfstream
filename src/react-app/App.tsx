@@ -24,10 +24,11 @@ const sidParam = new URLSearchParams(window.location.search).get('sid')
 const SYSTEM_LOG = 'System'
 const STREAMER_LOG = 'Streamer'
 const PLAYER_LOG = 'Player'
-const CMD_LIST = new Set<string>(['/hide', '/log'])
+const CMD_LIST = new Set<string>(['/hide', '/log', '/mute', '/unmute'])
 const ttsPlayer = new ChromeTTS()
 
 const videoMaxBitrate = 2000000
+const maxHistoryMessage = 1000
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
@@ -55,9 +56,11 @@ function App() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setChatVisible(true)
+        setChatVisible(false)
         setLogVisible(false)
         setQrVisible(false)
+      } else if (event.key === 'Enter') {
+        setChatVisible(true)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -245,6 +248,12 @@ function App() {
         case '/log':
           setLogVisible(true)
           break
+        case '/mute':
+          getVideoElement()!.muted = true
+          break
+        case '/unmute':
+          getVideoElement()!.muted = false
+          break
       }
       return true
     }
@@ -278,11 +287,14 @@ function App() {
     if (!sender) {
       console.log(SYSTEM_LOG, text)
     }
-    setChatMessages(prev => [...prev, {
-      text: text,
-      timestamp: new Date().toISOString(),
-      sender: sender ?? 'system'
-    }])
+    setChatMessages(prev => {
+      const msgs = [...prev, {
+        text: text,
+        timestamp: new Date().toISOString(),
+        sender: sender ?? 'system'
+      }]
+      return msgs.slice(-maxHistoryMessage)
+    })
   }
 
   function initBroadcastDc(client: WHIPClient, peer: RTCPeerConnection) {
