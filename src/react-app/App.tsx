@@ -208,10 +208,10 @@ function App() {
     })
     signalPeer.onClose(() => {
       addChatMessage(`${signalPeer.getRemoteSid()} left`)
-      // reset subs
-      signalPeer.setRemoteSid()
       // sub dc closed, restart to brocasting mode
-      signalPeer.connect()
+      signalPeer.close(() => {
+        setTimeout(() => { initSignalPeer(client, broadcastDc) })
+      })
     })
     signalPeer.onMessage((ev) => {
       const msg = JSON.parse(ev.data);

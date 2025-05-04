@@ -8,7 +8,6 @@ import {
 
 interface SignalPeerConfig {
   iceServers?: RTCIceServer[];
-  autoStart?: boolean;
 }
 
 type MessageCallback = (message: MessageEvent) => void;
@@ -27,7 +26,6 @@ export class SignalPeer {
   private onMessageCallback: MessageCallback | null;
   private onOpenCallback: StatusCallback | null;
   private onCloseCallback: StatusCallback | null;
-  private onErrorCallback: StatusCallback | null;
   private onConnectionStateCallback: StatusCallback | null;
   private remoteSid: string | undefined;
   private sessionId: string | undefined;
@@ -41,27 +39,19 @@ export class SignalPeer {
     this.onMessageCallback = null;
     this.onOpenCallback = null;
     this.onCloseCallback = null;
-    this.onErrorCallback = null;
     this.onConnectionStateCallback = null;
   }
 
   async connect() {
-    try {
-      const peer = this._initPeer();
-      const offer = await peer.createOffer();
-      await peer.setLocalDescription(offer);
-      const res = await createSession(offer.sdp)
-      if (!res?.sessionDescription) {
-        throw new Error('failed to create session')
-      }
-      this.sessionId = res?.sessionId
-      await peer.setRemoteDescription(res?.sessionDescription.toJSON())
-    } catch (e) {
-      console.log('connect failed', e)
-      if (this.onErrorCallback) {
-        this.onErrorCallback()
-      }
+    const peer = this._initPeer();
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    const res = await createSession(offer.sdp)
+    if (!res?.sessionDescription) {
+      throw new Error('failed to create session')
     }
+    this.sessionId = res?.sessionId
+    await peer.setRemoteDescription(res?.sessionDescription.toJSON())
   }
 
   static async kick(session: string): Promise<boolean> {
@@ -98,8 +88,6 @@ export class SignalPeer {
   }
 
   setRemoteSid(sid?: string): void {
-    // auto start to connect signal to remote
-    this.config.autoStart = !!sid
     this.remoteSid = sid
   }
 
@@ -115,7 +103,6 @@ export class SignalPeer {
         if (this.onCloseCallback) {
           this.onCloseCallback()
         }
-        this.setRemoteSid()
       }
       signalDc.onopen = () => {
         console.log('SignalDc', 'open')
@@ -144,7 +131,7 @@ export class SignalPeer {
       if (this.onConnectionStateCallback && this.connected != lastConnected) {
         this.onConnectionStateCallback()
       }
-      if (this.connected && this.config.autoStart) {
+      if (this.connected && this.getRemoteSid()) {
         this.startSignalDc()
       }
     }
@@ -154,10 +141,6 @@ export class SignalPeer {
 
   onConnectionStateChanged(callback: StatusCallback): void {
     this.onConnectionStateCallback = callback;
-  }
-
-  onError(callback: StatusCallback): void {
-    this.onErrorCallback = callback;
   }
 
   onMessage(callback: MessageCallback): void {
@@ -172,13 +155,15 @@ export class SignalPeer {
     this.onCloseCallback = callback;
   }
 
-  close(): void {
-    if (this.signalDc) {
+  close(callback?: StatusCallback): void {
+    if (this.signalDc && this.signalDc.readyState in ['open', 'connecting']) {
       this.signalDc.close()
+      this.signalDc = null
     }
     if (this.peerConnection) {
       this.peerConnection.close()
       this.peerConnection = null
+      if (callback) callback()
     }
   }
 }
