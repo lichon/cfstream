@@ -6,6 +6,8 @@ import {
   SignalType,
 } from './api'
 
+const originalRTCPeerConnection = window.RTCPeerConnection
+
 interface SignalPeerConfig {
   iceServers?: RTCIceServer[];
 }
@@ -40,6 +42,31 @@ export class SignalPeer {
     this.onOpenCallback = null;
     this.onCloseCallback = null;
     this.onConnectionStateCallback = null;
+  }
+
+  static patchPeerConnection() {
+    // Create a new constructor function that wraps the original
+    const patchedConstructor: typeof RTCPeerConnection = function (
+      this: RTCPeerConnection,
+      configuration?: RTCConfiguration
+    ) {
+      const peer = new originalRTCPeerConnection(configuration)
+      const bootstrapDc = peer.createDataChannel('bootstrap')
+      Object.defineProperty(peer, 'bootstrapDc', {
+        enumerable: true,
+        configurable: false,
+        get: () => bootstrapDc,
+        set: (_v) => { throw new Error('cannot set bootstrap dc') }
+      })
+      return peer
+    } as never
+
+    // Copy over the prototype and static methods
+    patchedConstructor.prototype = originalRTCPeerConnection.prototype
+    patchedConstructor.generateCertificate = originalRTCPeerConnection.generateCertificate
+
+    // Replace the global RTCPeerConnection
+    window.RTCPeerConnection = patchedConstructor;
   }
 
   async connect() {

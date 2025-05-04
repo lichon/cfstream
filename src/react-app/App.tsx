@@ -9,6 +9,7 @@ import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
 import { SignalPeer, SignalEvent } from './libs/signalpeer'
+import { ChromeTTS } from './libs/tts'
 import {
   initDataChannel,
   getSessionInfo,
@@ -20,39 +21,14 @@ import {
 
 let _firstLoad = true
 const sidParam = new URLSearchParams(window.location.search).get('sid')
-
 const SYSTEM_LOG = 'System'
 const STREAMER_LOG = 'Streamer'
 const PLAYER_LOG = 'Player'
+const CMD_LIST = new Set<string>(['/hide', '/log'])
+const ttsPlayer = new ChromeTTS()
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
-}
-
-const originalRTCPeerConnection = window.RTCPeerConnection
-function patchPeerConnection() {
-  // Create a new constructor function that wraps the original
-  const patchedConstructor: typeof RTCPeerConnection = function(
-    this: RTCPeerConnection,
-    configuration?: RTCConfiguration
-  ) {
-    const peer = new originalRTCPeerConnection(configuration)
-    const bootstrapDc = peer.createDataChannel('bootstrap')
-    Object.defineProperty(peer, 'bootstrapDc', {
-      enumerable: true,
-      configurable: false,
-      get: () => bootstrapDc,
-      set: (_v) => { throw new Error('cannot set bootstrap dc')}
-    })
-    return peer
-  } as never
-
-  // Copy over the prototype and static methods
-  patchedConstructor.prototype = originalRTCPeerConnection.prototype
-  patchedConstructor.generateCertificate = originalRTCPeerConnection.generateCertificate
-
-  // Replace the global RTCPeerConnection
-  window.RTCPeerConnection = patchedConstructor;
 }
 
 function App() {
@@ -62,6 +38,7 @@ function App() {
   const [whepPlayer, setWHEPPlayer] = useState<WebRTCPlayer | null>()
   const [qrVisible, setQrVisible] = useState(false)
   const [logVisible, setLogVisible] = useState(false)
+  const [chatVisible, setChatVisible] = useState(true)
   const [showHoverMenu, setShowHoverMenu] = useState(false)
   const [signalPeer, setSignalPeer] = useState<SignalPeer | null>()
   const [playerSignalDc, setPlayerSignalDc] = useState<RTCDataChannel | null>()
@@ -71,8 +48,17 @@ function App() {
   useEffect(() => {
     if (!_firstLoad) return
     _firstLoad = false
-    patchPeerConnection()
+    SignalPeer.patchPeerConnection()
     play()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setChatVisible(true)
+        setLogVisible(false)
+        setQrVisible(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
 
@@ -217,6 +203,9 @@ function App() {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'chat') {
         addChatMessage(msg.content, signalPeer.getRemoteSid())
+        if (ttsPlayer.isSupported()) {
+          ttsPlayer.speak(msg.content, { rate: 3 })
+        }
         // broadcast to all subs
         broadcastDc.send(ev.data)
       }
@@ -225,7 +214,25 @@ function App() {
     signalPeer.connect()
   }
 
+  function handleCmdFromChat(text: string): boolean {
+    if (CMD_LIST.has(text)) {
+      switch (text) {
+        case '/hide':
+          setChatVisible(false)
+          break
+        case '/log':
+          setLogVisible(true)
+          break
+      }
+      return true
+    }
+    return false
+  }
+
   function sendChatMessage(text: string, sender?: string) {
+    if (handleCmdFromChat(text)) {
+      return
+    }
     const msgObject = {
       type: 'chat',
       content: text,
@@ -245,6 +252,7 @@ function App() {
   }
 
   function addChatMessage(text: string, sender?: string) {
+    if (!text.length) return
     if (!sender) {
       console.log(SYSTEM_LOG, text)
     }
@@ -430,7 +438,7 @@ function App() {
       </div>
 
       <ChatOverlay
-        show={true}
+        show={chatVisible}
         messages={chatMessages}
         onSend={(text) => sendChatMessage(text)}
       />
