@@ -47,5 +47,6 @@
     "lint": "eslint .",
     "preview": "npm run build && vite preview"
   },
-  "type": "module"
+  "type": "module",
+  "packageManager": "^pnpm@9.10.0"
 }
