@@ -6,9 +6,12 @@ interface LogEntry {
   timestamp: string;
 }
 
-const LoggingOverlay: React.FC = () => {
+interface LoggingOverlayProps {
+  show: boolean;
+}
+
+const LoggingOverlay: React.FC<LoggingOverlayProps> = ({ show: isVisible }) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
     const originalConsole = {
@@ -56,22 +59,11 @@ const LoggingOverlay: React.FC = () => {
 
   return (
     <>
-      <button
-        onClick={() => setIsVisible(!isVisible)}
-        style={{
-          position: 'fixed',
-          bottom: '10px',
-          left: '0px',
-          zIndex: 9999,
-        }}
-      >
-        {isVisible ? 'Hide Logs' : 'Show Logs'}
-      </button>
       {isVisible && (
         <div
           style={{
             position: 'fixed',
-            bottom: '50px',
+            bottom: '0',
             minHeight: '10%',
             width: '100%',
             maxHeight: '60%',

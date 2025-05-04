@@ -1,0 +1,103 @@
+import React, { useState } from 'react';
+
+export interface ChatMessage {
+  text: string;
+  timestamp: string;
+  sender: string;
+}
+
+interface ChatOverlayProps {
+  show: boolean;
+  messages: ChatMessage[];
+  onSend: (message: string) => void;
+}
+
+export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend }) => {
+  const [inputMessage, setInputMessage] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputMessage.trim()) {
+      onSend(inputMessage);
+      setInputMessage('');
+    }
+  };
+
+  return (
+    <>
+      {show && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '0',
+            width: '100%',
+            maxHeight: '50%',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '10px',
+            overflow: 'auto',
+            zIndex: 1000,
+            borderRadius: '0.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{ flex: 1, overflowY: 'auto', marginBottom: '10px' }}>
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                style={{
+                  marginBottom: '8px',
+                  fontSize: '14px',
+                  fontFamily: 'sans-serif',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  textAlign: 'left',
+                  width: '100%',
+                }}
+              >
+                <span style={{ opacity: 0.7, fontSize: '12px' }}>
+                  {new Date(msg.timestamp).toLocaleTimeString()} - {msg.sender}:{' '}
+                </span>
+                <span style={{ color: '#fff' }}>{msg.text}</span>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              style={{
+                flex: 1,
+                padding: '8px',
+                borderRadius: '0.5rem',
+                border: 'none',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                color: 'white',
+                outline: 'none',
+              }}
+              placeholder="Type a message..."
+            />
+            <button
+              type="submit"
+              style={{
+                marginRight: '8px',
+                padding: '8px 16px',
+                borderRadius: '0.5rem',
+                border: 'none',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              Send
+            </button>
+            <div>
+            </div>
+          </form>
+        </div>
+      )}
+    </>
+  );
+};
