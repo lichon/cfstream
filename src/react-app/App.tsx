@@ -8,7 +8,7 @@ import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
-import { SignalPeer, SignalEvent } from './libs/signalpeer'
+import { SignalPeer, SignalMessage, SignalEvent } from './libs/signalpeer'
 import { ChromeTTS } from './libs/tts'
 import {
   initDataChannel,
@@ -100,15 +100,32 @@ function App() {
       const bootstrapDc = anyPeer['bootstrapDc'] as RTCDataChannel
       const peer = anyPeer as RTCPeerConnection
 
+      const kickedSid = new Set<string>()
+      async function handleSignalEvent(event: SignalMessage, selfSid: string) {
+        const signalEvent = event.content as SignalEvent
+        if (signalEvent.status == 'waiting') {
+          if (kickedSid.has(signalEvent.sid)) return
+          if (await SignalPeer.kick(signalEvent.sid)) {
+            addChatMessage(`signal waiting`)
+            kickedSid.add(signalEvent.sid)
+          }
+        } else if (signalEvent.status == 'connected') {
+          if (selfSid === signalEvent.sid) {
+            addChatMessage(`signal connected`)
+          }
+        }
+      }
+
       function getPlayerSession(): string {
         const resourceUrl = playerAdapter['resource'] as string
         const playerSid = extractSessionIdFromUrl(resourceUrl)
         setPlayerSession(playerSid)
+        addChatMessage(`player connected ${playerSid}`)
         return playerSid!
       }
 
       function createSignalDc(playerSid: string) {
-        initDataChannel(playerSid, peer, null, 'signal').then(dc => {
+        initDataChannel(playerSid, peer, null, SignalPeer.label).then(dc => {
           dc.onopen = () => {
             console.log(PLAYER_LOG, 'signalDc open')
           }
@@ -119,22 +136,15 @@ function App() {
       function createBroadcastListener(playerSid: string) {
         setPlayerSession(playerSid)
         initDataChannel(playerSid, peer, sidParam).then(dc => {
-          const kickedSid = new Set<string>()
           dc.onopen = () => {
             console.log(PLAYER_LOG, 'broadcast listener open')
           }
           dc.onmessage = async (ev) => {
             console.log(PLAYER_LOG, 'recv msg', ev.data as string)
-            const event = JSON.parse(ev.data) as SignalEvent
-            if (event.type == 'signalsession') {
-              const eventContent = event.content as string
-              if (kickedSid.has(eventContent)) return
-              if (await SignalPeer.kick(eventContent)) {
-                kickedSid.add(eventContent)
-              }
-              return
-            }
-            if (event.type == 'chat') {
+            const event = JSON.parse(ev.data) as SignalMessage
+            if (event.type == 'signal') {
+              handleSignalEvent(event, playerSid)
+            } else if (event.type == 'chat') {
               addChatMessage(event.content as string, event.sender == playerSid ? 'You' : 'Owner')
             }
           }
@@ -157,13 +167,20 @@ function App() {
     })
   }
 
+  function newSignalEvent(status: string, sid: string) {
+    return {
+      type: 'signal',
+      content: {
+        sid: sid,
+        status: status
+      }
+    }
+  }
+
   function broadcastSignalSid(signalPeer: SignalPeer, broadcastDc: RTCDataChannel) {
     if (signalPeer.isConnected() && !signalPeer.isSubscriber()) {
       const signalSid = signalPeer.getSessionId()
-      broadcastDc.send(JSON.stringify({
-        type: 'signalsession',
-        content: signalSid,
-      }))
+      broadcastDc.send(JSON.stringify(newSignalEvent('waiting', signalSid!)))
       setTimeout(() => broadcastSignalSid(signalPeer, broadcastDc), 5000)
     }
   }
@@ -189,8 +206,11 @@ function App() {
       }
     })
     signalPeer.onOpen(() => {
-      if (signalPeer.isSubscriber())
-        addChatMessage(`${signalPeer.getRemoteSid()} joined`)
+      if (signalPeer.isSubscriber()) {
+        const connectedSid = signalPeer.getRemoteSid()
+        addChatMessage(`${connectedSid} joined`)
+        broadcastDc.send(JSON.stringify(newSignalEvent('connected', connectedSid!)))
+      }
     })
     signalPeer.onClose(() => {
       addChatMessage(`${signalPeer.getRemoteSid()} left`)
@@ -359,13 +379,13 @@ function App() {
         return peer
       }
     })
+    addChatMessage('stream client starting')
     await client.setIceServersFromEndpoint()
     await client.ingest(mediaStream)
     video.srcObject = mediaStream
     const resourceUrl = await client.getResourceUrl()
     setStreamSession(extractSessionIdFromUrl(resourceUrl))
     setWHIPClient(client)
-    addChatMessage('stream client starting')
   }
 
   return (

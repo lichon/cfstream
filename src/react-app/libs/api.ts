@@ -1,8 +1,6 @@
 // API服务封装
 const API_BASE = '/api/sessions';
 
-export type SignalType = 'signalsession' | 'chat' | 'action'
-
 export const STUN_SERVERS = [{ urls: 'stun:stun.cloudflare.com:3478' }]
 
 interface Track {
