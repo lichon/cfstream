@@ -38,11 +38,6 @@ function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
 }
 
-async function getCameras() {
-  const devices = await navigator.mediaDevices.enumerateDevices()
-  return devices.filter(device => device.kind === 'videoinput')
-}
-
 function App() {
   const [streamSession, setStreamSession] = useState<string | null>()
   const [playerSession, setPlayerSession] = useState<string | null>()
