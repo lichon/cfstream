@@ -27,7 +27,8 @@ const STREAMER_LOG = 'Streamer'
 const PLAYER_LOG = 'Player'
 const ttsPlayer = new ChromeTTS()
 
-const CMD_LIST = getConfig().ui.cmdList
+const chatCmdList = getConfig().ui.cmdList
+const jitterBufferTarget = getConfig().stream.jitterBufferTarget
 const videoMaxBitrate = getConfig().stream.videoBitrate
 const maxHistoryMessage = getConfig().ui.maxHistoryMessage
 const openLinkOnShare = getConfig().ui.openLinkOnShare
@@ -165,9 +166,17 @@ function App() {
         })
       }
 
+      function jitterBufferConfig() {
+        // set all receiver with the same buffer
+        peer.getReceivers().forEach(r => {
+          r.jitterBufferTarget = jitterBufferTarget
+        })
+      }
+
       bootstrapDc.onopen = () => {
         console.log(PLAYER_LOG, 'bootstarp open')
         const playerSid = getPlayerSession()
+        jitterBufferConfig()
         createSignalDc(playerSid)
         createBroadcastListener(playerSid)
       }
@@ -233,7 +242,7 @@ function App() {
   }
 
   function handleCmdFromChat(text: string): boolean {
-    if (CMD_LIST.has(text)) {
+    if (chatCmdList.has(text)) {
       const v = getVideoElement()!
       switch (text) {
         case '/h':

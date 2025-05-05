@@ -13,6 +13,7 @@ export interface AppConfig {
     host: string
   }
   stream: {
+    jitterBufferTarget: number
     videoBitrate: number
     broadcastLabel: string
     signalLabel: string
@@ -39,6 +40,7 @@ const defaultConfig: AppConfig = {
     host: import.meta.env.VITE_PLAYER_HOST || window.location.host,
   },
   stream: {
+    jitterBufferTarget: Number(import.meta.env.VITE_JITTER_BUFFER_TARGET) || 2000,
     videoBitrate: Number(import.meta.env.VITE_VIDEO_BITRATE) || 1000000,
     broadcastLabel: 'broadcast',
     signalLabel: 'signal',
