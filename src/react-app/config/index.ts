@@ -20,6 +20,7 @@ export interface AppConfig {
   ui: {
     maxHistoryMessage: number
     openLinkOnShare: boolean
+    isMobilePlatform: boolean
   }
   debug: boolean
 }
@@ -40,7 +41,8 @@ const defaultConfig: AppConfig = {
   },
   ui: {
     maxHistoryMessage: 1000,
-    openLinkOnShare: ['true', '1'].includes(import.meta.env.VITE_OPEN_ON_SHARE)
+    openLinkOnShare: ['true', '1'].includes(import.meta.env.VITE_OPEN_ON_SHARE),
+    isMobilePlatform: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   },
   debug: import.meta.env.DEV
 }
