@@ -93,6 +93,7 @@ function App() {
     setWHEPPlayer(player)
     setStreamSession(sidParam)
 
+    addChatMessage(`player loading ${sidParam}`)
     player.on('no-media', () => {
       addChatMessage('media timeout')
       player.destroy()
@@ -182,8 +183,8 @@ function App() {
     }
   }
 
-  function initSignalPeer(client: WHIPClient, broadcastDc: RTCDataChannel) {
-    const signalPeer = new SignalPeer()
+  function initSignalPeer(client: WHIPClient, broadcastDc: RTCDataChannel, remoteSid?: string) {
+    const signalPeer = new SignalPeer(remoteSid)
     signalPeer.onConnectionStateChanged(() => {
       if (signalPeer.isConnected()) {
         // new signal connected, broadcast self to subs
@@ -196,9 +197,10 @@ function App() {
         }).then(info => {
           if (info?.subs?.length) {
             // TODO support multiple subs
-            signalPeer.setRemoteSid(info.subs[0])
+            signalPeer.close(() => {
+              initSignalPeer(client, broadcastDc, info.subs[0])
+            })
           }
-          signalPeer.connect()
         })
       }
     })
@@ -213,7 +215,7 @@ function App() {
       addChatMessage(`${signalPeer.getRemoteSid()} left`)
       // sub dc closed, restart to brocasting mode
       signalPeer.close(() => {
-        setTimeout(() => { initSignalPeer(client, broadcastDc) })
+        initSignalPeer(client, broadcastDc)
       })
     })
     signalPeer.onMessage((ev) => {

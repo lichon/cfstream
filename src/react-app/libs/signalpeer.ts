@@ -44,12 +44,15 @@ export class SignalPeer {
   private remoteSid: string | undefined;
   private sessionId: string | undefined;
   private connected: boolean;
+  private closed: boolean;
 
-  constructor(config: SignalPeerConfig = { iceServers: STUN_SERVERS }) {
+  constructor(remoteSid?: string, config: SignalPeerConfig = { iceServers: STUN_SERVERS }) {
     this.config = config;
     this.peerConnection = null;
     this.signalDc = null;
     this.connected = false;
+    this.closed = false;
+    this.remoteSid = remoteSid;
     this.onMessageCallback = null;
     this.onOpenCallback = null;
     this.onCloseCallback = null;
@@ -102,9 +105,14 @@ export class SignalPeer {
   }
 
   static async kick(session: string): Promise<boolean> {
-    const sdp = (await new RTCPeerConnection().createOffer()).sdp
-    const res = await kickSignalSession(session, sdp || '');
-    return res.status == 201
+    const tmpPeer = new RTCPeerConnection()
+    try {
+      const sdp = (await tmpPeer.createOffer()).sdp
+      const res = await kickSignalSession(session, sdp || '')
+      return res.status == 201
+    } finally {
+      tmpPeer.close()
+    }
   }
 
   async connect() {
@@ -144,10 +152,6 @@ export class SignalPeer {
 
   getRemoteSid(): string | undefined {
     return this.remoteSid
-  }
-
-  setRemoteSid(sid?: string): void {
-    this.remoteSid = sid
   }
 
   startSignalDc() {
@@ -221,6 +225,10 @@ export class SignalPeer {
   }
 
   close(callback?: StatusCallback): void {
+    if (this.closed) return
+    this.closed = true
+    // do not notify user if close by self
+    this.onCloseCallback = null
     if (this.signalDc) {
       this.signalDc.close()
       this.signalDc = null
@@ -228,7 +236,7 @@ export class SignalPeer {
     if (this.peerConnection) {
       this.peerConnection.close()
       this.peerConnection = null
-      if (callback) callback()
     }
+    if (callback) callback()
   }
 }
