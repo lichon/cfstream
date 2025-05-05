@@ -25,9 +25,9 @@ const sidParam = new URLSearchParams(window.location.search).get('sid')
 const SYSTEM_LOG = 'System'
 const STREAMER_LOG = 'Streamer'
 const PLAYER_LOG = 'Player'
-const CMD_LIST = new Set<string>(['/hide', '/h', '/log', '/l', '/mute', '/m', '/unmute', '/u'])
 const ttsPlayer = new ChromeTTS()
 
+const CMD_LIST = getConfig().ui.cmdList
 const videoMaxBitrate = getConfig().stream.videoBitrate
 const maxHistoryMessage = getConfig().ui.maxHistoryMessage
 const openLinkOnShare = getConfig().ui.openLinkOnShare
@@ -163,18 +163,11 @@ function App() {
         })
       }
 
-      if (bootstrapDc.readyState == 'open') {
-        console.log(PLAYER_LOG, 'bootstarp opened')
+      bootstrapDc.onopen = () => {
+        console.log(PLAYER_LOG, 'bootstarp open')
         const playerSid = getPlayerSession()
         createSignalDc(playerSid)
         createBroadcastListener(playerSid)
-      } else {
-        bootstrapDc.onopen = () => {
-          console.log(PLAYER_LOG, 'bootstarp open')
-          const playerSid = getPlayerSession()
-          createSignalDc(playerSid)
-          createBroadcastListener(playerSid)
-        }
       }
     })
   }
@@ -239,6 +232,7 @@ function App() {
 
   function handleCmdFromChat(text: string): boolean {
     if (CMD_LIST.has(text)) {
+      const v = getVideoElement()!
       switch (text) {
         case '/h':
         case '/hide':
@@ -250,11 +244,21 @@ function App() {
           break
         case '/m':
         case '/mute':
-          getVideoElement()!.muted = true
+          v.muted = true
           break
         case '/u':
         case '/unmute':
-          getVideoElement()!.muted = false
+          v.muted = false
+          break
+        case '/vu':
+        case '/volumeUp':
+          v.volume = v.volume + 0.1
+          addChatMessage(`video volume is ${v.volume}`)
+          break
+        case '/vd':
+        case '/volumeDown':
+          v.volume = v.volume - 0.1
+          addChatMessage(`video volume is ${v.volume}`)
           break
       }
       return true

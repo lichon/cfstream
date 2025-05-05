@@ -21,6 +21,8 @@ export interface AppConfig {
     maxHistoryMessage: number
     openLinkOnShare: boolean
     isMobilePlatform: boolean
+    cmdList: Set<string>
+    rpcList: Set<string>
   }
   debug: boolean
 }
@@ -42,7 +44,9 @@ const defaultConfig: AppConfig = {
   ui: {
     maxHistoryMessage: 1000,
     openLinkOnShare: ['true', '1'].includes(import.meta.env.VITE_OPEN_ON_SHARE),
-    isMobilePlatform: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    isMobilePlatform: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+    cmdList: new Set<string>(['/hide', '/h', '/log', '/l', '/mute', '/m', '/unmute', '/u', '/volumeUp', '/vu', '/volumeDown', '/vd']),
+    rpcList: new Set<string>(['fetch', 'tts']),
   },
   debug: import.meta.env.DEV
 }
