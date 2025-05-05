@@ -15,6 +15,7 @@ interface ChatOverlayProps {
 export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend }) => {
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -23,6 +24,12 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (show) {
+      inputRef.current?.focus();
+    }
+  }, [show]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +82,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend
           </div>
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
             <input
+              ref={inputRef}
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}

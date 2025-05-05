@@ -25,7 +25,7 @@ const sidParam = new URLSearchParams(window.location.search).get('sid')
 const SYSTEM_LOG = 'System'
 const STREAMER_LOG = 'Streamer'
 const PLAYER_LOG = 'Player'
-const CMD_LIST = new Set<string>(['/hide', '/log', '/mute', '/unmute'])
+const CMD_LIST = new Set<string>(['/hide', '/h', '/log', '/l', '/mute', '/m', '/unmute', '/u'])
 const ttsPlayer = new ChromeTTS()
 
 const videoMaxBitrate = getConfig().stream.videoBitrate
@@ -36,6 +36,11 @@ const isMoblie = getConfig().ui.isMobilePlatform
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
+}
+
+async function getCameras() {
+  const devices = await navigator.mediaDevices.enumerateDevices()
+  return devices.filter(device => device.kind === 'videoinput')
 }
 
 function App() {
@@ -51,6 +56,8 @@ function App() {
   const [playerSignalDc, setPlayerSignalDc] = useState<RTCDataChannel | null>()
   const [broadcastDc, setBroadcastDc] = useState<RTCDataChannel | null>()
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [isFrontCamera, setIsFrontCamera] = useState(true);
+  const [isScreenShare, setScreenShare] = useState(true);
 
   useEffect(() => {
     if (!_firstLoad) return
@@ -178,7 +185,7 @@ function App() {
   }
 
   function broadcastSignalSid(signalPeer: SignalPeer, broadcastDc: RTCDataChannel) {
-    if (signalPeer.isConnected() && !signalPeer.isSubscriber()) {
+    if (signalPeer.isConnected() && !signalPeer.isSubscriber() && broadcastDc.readyState == 'open') {
       const signalSid = signalPeer.getSessionId()
       broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('waiting', signalSid!)))
       setTimeout(() => broadcastSignalSid(signalPeer, broadcastDc), 5000)
@@ -238,15 +245,19 @@ function App() {
   function handleCmdFromChat(text: string): boolean {
     if (CMD_LIST.has(text)) {
       switch (text) {
+        case '/h':
         case '/hide':
           setChatVisible(false)
           break
+        case '/l':
         case '/log':
           setLogVisible(true)
           break
+        case '/m':
         case '/mute':
           getVideoElement()!.muted = true
           break
+        case '/u':
         case '/unmute':
           getVideoElement()!.muted = false
           break
@@ -321,9 +332,45 @@ function App() {
     }
   }
 
-  async function getMediaStream(shareScreen?: boolean) {
+  async function switchMedia() {
+    const video = getVideoElement()
+    if (!video || !whipClient) return
+
+    const newFacingMode = isFrontCamera ? 'environment' : 'user'
+    setIsFrontCamera(!isFrontCamera)
+    setScreenShare(!isScreenShare)
+
+    // Get new media stream with switched camera
+    const newStream = await getMediaStream(!isScreenShare, newFacingMode)
+
+    // Replace video track
+    const oldStream = video.srcObject as MediaStream
+    const oldTrack = oldStream.getVideoTracks()[0]
+    const newTrack = newStream.getVideoTracks()[0]
+    newStream.getTracks().forEach(t => {
+      if (t !== newTrack) t.stop()
+    })
+
+    const anyClient = whipClient as never
+    const peer = anyClient['peer'] as RTCPeerConnection
+    // Replace track in peer connection
+    const sender = peer.getSenders().find(
+      s => s.track?.id === oldTrack.id
+    )
+    if (sender) {
+      await sender.replaceTrack(newTrack)
+    }
+
+    // Replace track in video element
+    oldTrack.stop()
+    oldStream.removeTrack(oldTrack)
+    oldStream.addTrack(newTrack)
+  }
+
+  async function getMediaStream(shareScreen?: boolean, facingMode?: string) {
     let ret
     if (shareScreen && navigator.mediaDevices.getDisplayMedia) {
+      setScreenShare(true)
       ret = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: { ideal: 1280 },
@@ -333,9 +380,11 @@ function App() {
         audio: true,
       })
     } else {
+      setScreenShare(false)
       ret = await navigator.mediaDevices.getUserMedia({
         video: {
           frameRate: { ideal: 30 },
+          facingMode: facingMode || 'environment'
         },
         audio: { deviceId: 'communications' },
       })
@@ -351,6 +400,7 @@ function App() {
         setWHIPClient(null)
         setStreamSession(null)
       }
+      addChatMessage('stream client closed')
     }
     if (signalPeer) {
       signalPeer.close()
@@ -359,6 +409,7 @@ function App() {
   }
 
   async function startStream(shareScreen?: boolean) {
+    setShowHoverMenu(false)
     const video = getVideoElement()
     if (!video)
       throw Error('video tag not found')
@@ -452,9 +503,9 @@ function App() {
         </div>
         <div className='control-button-container' >
           <button className='control-bt'
-            onClick={() => { setLogVisible(!logVisible) }}
+            onClick={() => { switchMedia() }}
           >
-            Logs
+            Switch Camera
           </button>
         </div>
       </div>
@@ -469,6 +520,7 @@ function App() {
             }
           }}
           onClick={(ev) => {
+            setLogVisible(false)
             if (!isMoblie) return
             const video = ev.target as HTMLVideoElement
             if (video.paused) {
@@ -500,7 +552,7 @@ function App() {
         show={qrVisible}
         onClose={() => setQrVisible(false)}
       />
-      <LoggingOverlay show={logVisible}/>
+      <LoggingOverlay show={logVisible} />
     </>
   )
 }
