@@ -1,13 +1,16 @@
+import { getConfig } from '../config'
 import {
-  STUN_SERVERS,
   kickSignalSession,
   createSession,
   initDataChannel,
 } from './api'
 
-const originalRTCPeerConnection = window.RTCPeerConnection;
+const SIGNAL_LABEL = getConfig().stream.signalLabel
+const STUN_SERVERS = getConfig().api.stunServers
 const LOG_TAG = 'SignalPeer';
 const DC_LOG_TAG = 'SignalDc';
+
+const originalRTCPeerConnection = window.RTCPeerConnection;
 
 interface SignalPeerConfig {
   iceServers?: RTCIceServer[];
@@ -53,7 +56,7 @@ export class SignalPeer {
     this.onConnectionStateCallback = null;
   }
 
-  static label = 'signal'
+  static label = SIGNAL_LABEL
 
   static patchPeerConnection() {
     // Create a new constructor function that wraps the original
@@ -78,6 +81,24 @@ export class SignalPeer {
 
     // Replace the global RTCPeerConnection
     window.RTCPeerConnection = patchedConstructor;
+  }
+
+  static newSignalEvent(status: string, sid: string): SignalMessage {
+    return {
+      type: 'signal',
+      content: {
+        sid: sid,
+        status: status
+      } as SignalEvent
+    }
+  }
+
+  static newChatMsg(text: string, sender?: string): SignalMessage {
+    return {
+      type: 'chat',
+      content: text,
+      sender: sender,
+    }
   }
 
   static async kick(session: string): Promise<boolean> {

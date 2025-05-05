@@ -26,6 +26,8 @@ body {
   margin: 0;
   display: flex;
   place-items: center;
+  background-color: #1a1a1a;
+  color: #ffffff;
 }
 
 h1 {

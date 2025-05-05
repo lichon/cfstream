@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
+import { getConfig } from './config'
+
 import { WHIPClient } from '@eyevinn/whip-web-client'
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import LoggingOverlay from './components/logger'
@@ -16,7 +18,6 @@ import {
   getSessionUrl,
   getPlayerUrl,
   extractSessionIdFromUrl,
-  STUN_SERVERS
 } from './libs/api'
 
 let _firstLoad = true
@@ -27,8 +28,9 @@ const PLAYER_LOG = 'Player'
 const CMD_LIST = new Set<string>(['/hide', '/log', '/mute', '/unmute'])
 const ttsPlayer = new ChromeTTS()
 
-const videoMaxBitrate = 2000000
-const maxHistoryMessage = 1000
+const videoMaxBitrate = getConfig().stream.videoBitrate
+const maxHistoryMessage = getConfig().ui.maxHistoryMessage
+const openLinkOnShare = getConfig().ui.openLinkOnShare
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
@@ -86,13 +88,13 @@ function App() {
       video: video,
       type: 'whep',
       statsTypeFilter: '^inbound-rtp',
-      iceServers: STUN_SERVERS,
+      iceServers: getConfig().api.stunServers,
     })
     setWHEPPlayer(player)
     setStreamSession(sidParam)
 
     player.on('no-media', () => {
-      console.log(PLAYER_LOG, 'media timeout occured')
+      addChatMessage('media timeout')
       player.destroy()
       setWHEPPlayer(null)
       setStreamSession(null)
@@ -172,20 +174,10 @@ function App() {
     })
   }
 
-  function newSignalEvent(status: string, sid: string) {
-    return {
-      type: 'signal',
-      content: {
-        sid: sid,
-        status: status
-      }
-    }
-  }
-
   function broadcastSignalSid(signalPeer: SignalPeer, broadcastDc: RTCDataChannel) {
     if (signalPeer.isConnected() && !signalPeer.isSubscriber()) {
       const signalSid = signalPeer.getSessionId()
-      broadcastDc.send(JSON.stringify(newSignalEvent('waiting', signalSid!)))
+      broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('waiting', signalSid!)))
       setTimeout(() => broadcastSignalSid(signalPeer, broadcastDc), 5000)
     }
   }
@@ -214,7 +206,7 @@ function App() {
       if (signalPeer.isSubscriber()) {
         const connectedSid = signalPeer.getRemoteSid()
         addChatMessage(`${connectedSid} joined`)
-        broadcastDc.send(JSON.stringify(newSignalEvent('connected', connectedSid!)))
+        broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('connected', connectedSid!)))
       }
     })
     signalPeer.onClose(() => {
@@ -264,11 +256,7 @@ function App() {
     if (handleCmdFromChat(text)) {
       return
     }
-    const msgObject = {
-      type: 'chat',
-      content: text,
-      sender: sender,
-    }
+    const msgObject = SignalPeer.newChatMsg(text, sender)
     if (playerSignalDc && playerSignalDc.readyState == 'open') {
       msgObject.sender = playerSession!
       playerSignalDc.send(JSON.stringify(msgObject))
@@ -381,7 +369,7 @@ function App() {
       opts: {
         debug: false,
         noTrickleIce: true,
-        iceServers: STUN_SERVERS,
+        iceServers: getConfig().api.stunServers,
       },
       peerConnectionFactory: (config: RTCConfiguration) => {
         const peer = new RTCPeerConnection(config)
@@ -448,12 +436,11 @@ function App() {
                 return
 
               const playerUrl = getPlayerUrl(streamSession)
-              navigator.clipboard.writeText(playerUrl)
-              if (import.meta.env.DEV) {
+              if (openLinkOnShare) {
                 window.open(playerUrl, '_blank')
-              } else {
-                setQrVisible(true)
               }
+              setQrVisible(true)
+              navigator.clipboard?.writeText(playerUrl)
             }}
           >
             Copy view link
@@ -467,8 +454,20 @@ function App() {
           </button>
         </div>
       </div>
+
       <div className='video-wrapper'>
-        <video id='video' autoPlay muted
+        <video id='video'
+          src='data:video/mp4;base64,AAAAIGZ0eXBtcDQyAAAAAG1wNDJtcDQxaXNvbWF2YzEAAATKbW9vdgAAAGxtdmhkAAAAANLEP5XSxD+VAAB1MAAAdU4AAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAACFpb2RzAAAAABCAgIAQAE////9//w6AgIAEAAAAAQAABDV0cmFrAAAAXHRraGQAAAAH0sQ/ldLEP5UAAAABAAAAAAAAdU4AAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAoAAAAFoAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAHVOAAAH0gABAAAAAAOtbWRpYQAAACBtZGhkAAAAANLEP5XSxD+VAAB1MAAAdU5VxAAAAAAANmhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABMLVNNQVNIIFZpZGVvIEhhbmRsZXIAAAADT21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAw9zdGJsAAAAwXN0c2QAAAAAAAAAAQAAALFhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAoABaABIAAAASAAAAAAAAAABCkFWQyBDb2RpbmcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP//AAAAOGF2Y0MBZAAf/+EAHGdkAB+s2UCgL/lwFqCgoKgAAB9IAAdTAHjBjLABAAVo6+yyLP34+AAAAAATY29scm5jbHgABQAFAAUAAAAAEHBhc3AAAAABAAAAAQAAABhzdHRzAAAAAAAAAAEAAAAeAAAD6QAAAQBjdHRzAAAAAAAAAB4AAAABAAAH0gAAAAEAABONAAAAAQAAB9IAAAABAAAAAAAAAAEAAAPpAAAAAQAAE40AAAABAAAH0gAAAAEAAAAAAAAAAQAAA+kAAAABAAATjQAAAAEAAAfSAAAAAQAAAAAAAAABAAAD6QAAAAEAABONAAAAAQAAB9IAAAABAAAAAAAAAAEAAAPpAAAAAQAAE40AAAABAAAH0gAAAAEAAAAAAAAAAQAAA+kAAAABAAATjQAAAAEAAAfSAAAAAQAAAAAAAAABAAAD6QAAAAEAABONAAAAAQAAB9IAAAABAAAAAAAAAAEAAAPpAAAAAQAAB9IAAAAUc3RzcwAAAAAAAAABAAAAAQAAACpzZHRwAAAAAKaWlpqalpaampaWmpqWlpqalpaampaWmpqWlpqalgAAABxzdHNjAAAAAAAAAAEAAAABAAAAHgAAAAEAAACMc3RzegAAAAAAAAAAAAAAHgAAA5YAAAAVAAAAEwAAABMAAAATAAAAGwAAABUAAAATAAAAEwAAABsAAAAVAAAAEwAAABMAAAAbAAAAFQAAABMAAAATAAAAGwAAABUAAAATAAAAEwAAABsAAAAVAAAAEwAAABMAAAAbAAAAFQAAABMAAAATAAAAGwAAABRzdGNvAAAAAAAAAAEAAAT6AAAAGHNncGQBAAAAcm9sbAAAAAIAAAAAAAAAHHNiZ3AAAAAAcm9sbAAAAAEAAAAeAAAAAAAAAAhmcmVlAAAGC21kYXQAAAMfBgX///8b3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0OCByMTEgNzU5OTIxMCAtIEguMjY0L01QRUctNCBBVkMgY29kZWMgLSBDb3B5bGVmdCAyMDAzLTIwMTUgLSBodHRwOi8vd3d3LnZpZGVvbGFuLm9yZy94MjY0Lmh0bWwgLSBvcHRpb25zOiBjYWJhYz0xIHJlZj0zIGRlYmxvY2s9MTowOjAgYW5hbHlzZT0weDM6MHgxMTMgbWU9aGV4IHN1Ym1lPTcgcHN5PTEgcHN5X3JkPTEuMDA6MC4wMCBtaXhlZF9yZWY9MSBtZV9yYW5nZT0xNiBjaHJvbWFfbWU9MSB0cmVsbGlzPTEgOHg4ZGN0PTEgY3FtPTAgZGVhZHpvbmU9MjEsMTEgZmFzdF9wc2tpcD0xIGNocm9tYV9xcF9vZmZzZXQ9LTIgdGhyZWFkcz0xMSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgc3RpdGNoYWJsZT0xIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0zIGJfcHlyYW1pZD0yIGJfYWRhcHQ9MSBiX2JpYXM9MCBkaXJlY3Q9MSB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTIga2V5aW50PTI1MCBrZXlpbnRfbWluPTEgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1hYnIgbWJ0cmVlPTEgYml0cmF0ZT0xMDAgcmF0ZXRvbD0xLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAUtZYiEAC///vau/MsrRXpuxXk+/cTNwEQq4dXqZnPJvR0qLqyo1uJCH5bbeZVWpBYVfXU0+++96M6qhPZ9eP///8NvRi8hlwGfge4pAAAAAGp0eXAAAE1NAAB1AAAADABEREREREQAAAABHQAAACBkYXRhAAAABgUAAACgAwAAAAAAAAAAAAAAAAP//wAAAwqbW9v0AAAAAAAAANMLFkkAAAAAAAMAAAAAAAAAAAEAAAABAAAAAAAAAAUAAAH0AAABAAAAAAJ0cmFrAAAAXHRraGQAAAAH0sQ/ldLEP5UAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAbAAAAEgAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAABAAAH0gABAAAAAAGrbWRpYQAAACBtZGhkAAAAANLEP5XSxD+VAAB1MAAAdU5VxAAAAAAALWhkbHIAAAAAAAAAAHNvdW4AAAAAAAAAAAAAAABNLVNNQVNIIEhhbmRsZXIAAAABa21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAStzdGJsAAAAZ3N0c2QAAAAAAAAAAQAAAFdtcDRhAAAAAAAAAAEAAAAAAAAAAAACABAAAAAAdXNwcm8AAAAAAAAAAAAAAAAAVUxTIFRSQUNLAAADwkVTRFMAAAAMU291bmRIYW5kbGVyABhjb2xyAAAAAAAADHVuZGVmaW5lZAAAAAAAAAAsAAAAMGF2Y0MBRAAf/+EAGWdkAAf/p5k14pIQklKOgQEDAwMDAgMDAwMDAwAAAAARAAACAAAAAAhzdHRzAAAAAAAAAAIAAAABAAACAAAAABxzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAAASAAAAAQAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY1Ny44My4xMDA='
+          autoPlay muted playsInline
+          webkit-playsinline='true'
+          x-webkit-airplay='allow'
+          controlsList='nodownload'
+          // Add reference for Safari PiP API
+          ref={(video) => {
+            if (video) {
+              video.disablePictureInPicture = false
+            }
+          }}
           onClick={(ev) => {
             const video = ev.target as HTMLVideoElement
             if (video.paused) video.play()

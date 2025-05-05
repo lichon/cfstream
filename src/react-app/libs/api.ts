@@ -1,7 +1,7 @@
-// API服务封装
-const API_BASE = '/api/sessions';
+import { getConfig } from '../config'
 
-export const STUN_SERVERS = [{ urls: 'stun:stun.cloudflare.com:3478' }]
+const API_BASE = getConfig().api.baseUrl
+const BROADCAST_LABEL = getConfig().stream.broadcastLabel
 
 interface Track {
   location: 'local' | 'remote'
@@ -35,22 +35,20 @@ export interface NewSessionResponse {
   sessionDescription?: RTCSessionDescription;
 }
 
-export function extractSessionIdFromUrl(url: string | null): string | undefined {
-  return url ? url.split('/').pop() : undefined;
-}
-
 export function getSessionUrl(sid?: string | null): string {
-  const url = new URL(window.location.href);
-  url.pathname = sid ? `${API_BASE}/${sid}` : API_BASE;
-  url.search = '';
-  return url.toString();
+  const apiHost = import.meta.env.VITE_API_HOST || window.location.host
+  const protocol = window.location.protocol
+  return `${protocol}//${apiHost}${API_BASE}` + (sid ? `/${sid}` : '')
 }
 
 export function getPlayerUrl(sid?: string | null): string {
-  const url = new URL(window.location.href);
-  url.pathname = '/play';
-  url.search = `?sid=${sid}`;
-  return url.toString();
+  const playerHost = import.meta.env.VITE_PLAYER_HOST || window.location.host
+  const protocol = window.location.protocol
+  return `${protocol}//${playerHost}` + (sid ? `?sid=${sid}` : '')
+}
+
+export function extractSessionIdFromUrl(url: string | null): string | undefined {
+  return url ? url.split('/').pop() : undefined;
 }
 
 export async function createSession(offerSdp: string | undefined): Promise<NewSessionResponse | null> {
@@ -105,9 +103,9 @@ export async function initDataChannel(
   const dcRes = await createDataChannel(sid, [{
     sessionId: remoteSid ?? sid,
     location: remoteSid ? 'remote' : 'local',
-    dataChannelName: label ?? 'broadcast',
+    dataChannelName: label ?? BROADCAST_LABEL,
   }])
-  const dc = peer.createDataChannel(label ?? 'broadcast', {
+  const dc = peer.createDataChannel(label ?? BROADCAST_LABEL, {
     negotiated: true,
     id: dcRes.dataChannels[0].id
   })
