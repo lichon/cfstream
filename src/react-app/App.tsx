@@ -256,20 +256,24 @@ function App() {
         case '/m':
         case '/mute':
           v.muted = true
+          addChatMessage(`video muted`)
           break
         case '/u':
         case '/unmute':
           v.muted = false
+          addChatMessage(`video unmuted`)
           break
         case '/vu':
         case '/volumeUp':
-          v.volume = v.volume + 0.1
-          addChatMessage(`video volume is ${v.volume}`)
+          if (v.volume <= 0.9)
+            v.volume = v.volume + 0.1
+          addChatMessage(`video volume is ${v.volume * 100}`)
           break
         case '/vd':
         case '/volumeDown':
-          v.volume = v.volume - 0.1
-          addChatMessage(`video volume is ${v.volume}`)
+          if (v.volume >= 0.1)
+            v.volume = v.volume - 0.1
+          addChatMessage(`video volume is ${v.volume * 100}`)
           break
       }
       return true

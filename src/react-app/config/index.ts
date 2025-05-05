@@ -40,7 +40,7 @@ const defaultConfig: AppConfig = {
     host: import.meta.env.VITE_PLAYER_HOST || window.location.host,
   },
   stream: {
-    jitterBufferTarget: Number(import.meta.env.VITE_JITTER_BUFFER_TARGET) || 2000,
+    jitterBufferTarget: Number(import.meta.env.VITE_JITTER_BUFFER_TARGET) || 1500,
     videoBitrate: Number(import.meta.env.VITE_VIDEO_BITRATE) || 1000000,
     broadcastLabel: 'broadcast',
     signalLabel: 'signal',
