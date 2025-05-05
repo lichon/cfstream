@@ -33,6 +33,8 @@ const maxHistoryMessage = getConfig().ui.maxHistoryMessage
 const openLinkOnShare = getConfig().ui.openLinkOnShare
 const stunServers = getConfig().api.stunServers
 const isMoblie = getConfig().ui.isMobilePlatform
+const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
+const selfDisplayName = getConfig().ui.selfDisplayName
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
@@ -157,7 +159,7 @@ function App() {
             if (event.type == 'signal') {
               handleSignalEvent(event, playerSid)
             } else if (event.type == 'chat') {
-              addChatMessage(event.content as string, event.sender == playerSid ? 'You' : 'Owner')
+              addChatMessage(event.content as string, event.sender == playerSid ? selfDisplayName : event.sender)
             }
           }
         })
@@ -277,9 +279,9 @@ function App() {
       return
     }
     if (broadcastDc && broadcastDc.readyState == 'open') {
-      msgObject.sender = sender ?? 'Owner'
+      msgObject.sender = sender ?? ownerDisplayName
       broadcastDc.send(JSON.stringify(msgObject))
-      addChatMessage(text, sender ?? 'You')
+      addChatMessage(text, sender ?? selfDisplayName)
       return
     }
   }

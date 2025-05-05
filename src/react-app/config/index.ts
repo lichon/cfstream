@@ -18,6 +18,8 @@ export interface AppConfig {
     signalLabel: string
   }
   ui: {
+    streamOwnerDisplayName: string
+    selfDisplayName: string
     maxHistoryMessage: number
     openLinkOnShare: boolean
     isMobilePlatform: boolean
@@ -42,6 +44,8 @@ const defaultConfig: AppConfig = {
     signalLabel: 'signal',
   },
   ui: {
+    streamOwnerDisplayName: 'Owner',
+    selfDisplayName: 'You',
     maxHistoryMessage: 1000,
     openLinkOnShare: ['true', '1'].includes(import.meta.env.VITE_OPEN_ON_SHARE),
     isMobilePlatform: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
