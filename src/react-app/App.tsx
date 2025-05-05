@@ -28,6 +28,7 @@ const PLAYER_LOG = 'Player'
 const ttsPlayer = new ChromeTTS()
 
 const chatCmdList = getConfig().ui.cmdList
+const broadcastInterval = getConfig().stream.broadcastInterval
 const jitterBufferTarget = getConfig().stream.jitterBufferTarget
 const videoMaxBitrate = getConfig().stream.videoBitrate
 const maxHistoryMessage = getConfig().ui.maxHistoryMessage
@@ -56,11 +57,13 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isScreenShare, setScreenShare] = useState(true);
+  const [ttsEnabled, enableTTS] = useState(true);
 
   useEffect(() => {
     if (!_firstLoad) return
     _firstLoad = false
     SignalPeer.patchPeerConnection()
+    help()
     play()
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -76,6 +79,10 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
 
+  function help() {
+    addChatMessage('type /? for help')
+  }
+
   function stop() {
     if (whepPlayer) {
       whepPlayer.destroy()
@@ -90,6 +97,7 @@ function App() {
     if (whepPlayer || !video || !sidParam?.length)
       return
 
+    enableTTS(false)
     const player = new WebRTCPlayer({
       debug: false,
       video: video,
@@ -184,67 +192,61 @@ function App() {
   }
 
   function broadcastSignalSid(signalPeer: SignalPeer, broadcastDc: RTCDataChannel) {
-    if (signalPeer.isConnected() && !signalPeer.isSubscriber() && broadcastDc.readyState == 'open') {
-      const signalSid = signalPeer.getSessionId()
-      broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('waiting', signalSid!)))
-      setTimeout(() => broadcastSignalSid(signalPeer, broadcastDc), 5000)
+    if (signalPeer.isConnected() && broadcastDc.readyState == 'open') {
+      const sid = signalPeer.getSessionId()
+      broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('waiting', sid!)))
+      setTimeout(() => broadcastSignalSid(signalPeer, broadcastDc), broadcastInterval)
     }
   }
 
-  function initSignalPeer(client: WHIPClient, broadcastDc: RTCDataChannel, remoteSid?: string) {
-    const signalPeer = new SignalPeer(remoteSid)
-    signalPeer.onConnectionStateChanged(() => {
-      if (signalPeer.isConnected()) {
-        // new signal connected, broadcast self to subs
-        broadcastSignalSid(signalPeer, broadcastDc)
-      } else {
-        // signal disconnected, connect signal to new sub
-        client.getResourceUrl().then(resUrl => {
-          const sid = resUrl.split('/').pop()
-          return getSessionInfo(sid || '')
-        }).then(info => {
-          if (info?.subs?.length) {
-            // TODO support multiple subs
-            signalPeer.close(() => {
-              initSignalPeer(client, broadcastDc, info.subs[0])
-            })
-          }
-        })
-      }
+  function initSignalPeer(client: WHIPClient, broadcastDc: RTCDataChannel) {
+    const signalPeer = new SignalPeer()
+    signalPeer.onBootstrapReady(() => {
+      // bootstrap connected, broadcast self to subs
+      broadcastSignalSid(signalPeer, broadcastDc)
     })
-    signalPeer.onOpen(() => {
-      if (signalPeer.isSubscriber()) {
-        const connectedSid = signalPeer.getRemoteSid()
-        addChatMessage(`${connectedSid} joined`)
-        broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('connected', connectedSid!)))
-      }
-    })
-    signalPeer.onClose(() => {
-      addChatMessage(`${signalPeer.getRemoteSid()} left`)
-      // sub dc closed, restart to brocasting mode
-      signalPeer.close(() => {
-        initSignalPeer(client, broadcastDc)
+    signalPeer.onBootstrapKicked(() => {
+      // bootstrap kicked, connect signal to new sub
+      client.getResourceUrl().then(resUrl => {
+        const sid = resUrl.split('/').pop()
+        return getSessionInfo(sid || '')
+      }).then(info => {
+        info.subs.forEach(sid => signalPeer.newSignalDc(sid))
+        signalPeer.clearInvalidDc(info.subs)
       })
     })
-    signalPeer.onMessage((ev) => {
+    signalPeer.onOpen((sid: string) => {
+      addChatMessage(`${sid} joined`)
+      broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('connected', sid)))
+    })
+    signalPeer.onClose((sid: string) => {
+      addChatMessage(`${sid} left`)
+      broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('disconnected', sid)))
+    })
+    signalPeer.onMessage((sid: string, ev) => {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'chat') {
-        addChatMessage(msg.content, signalPeer.getRemoteSid())
-        if (ttsPlayer.isSupported()) {
-          ttsPlayer.speak(msg.content, { rate: 3 })
-        }
+        addChatMessage(msg.content, sid)
         // broadcast to all subs
         broadcastDc.send(ev.data)
       }
+      // TODO supoprt rpc
     })
     setSignalPeer(signalPeer)
-    signalPeer.connect()
+    signalPeer.start()
   }
 
   function handleCmdFromChat(text: string): boolean {
     if (chatCmdList.has(text)) {
       const v = getVideoElement()!
       switch (text) {
+        case '/?':
+          addChatMessage(`TODO add help tips`)
+          break
+        case '/c':
+        case '/clear':
+          setChatMessages([])
+          break
         case '/h':
         case '/hide':
           setChatVisible(false)
@@ -303,12 +305,17 @@ function App() {
     if (!text.length) return
     if (!sender) {
       console.log(SYSTEM_LOG, text)
+    } else {
+      const isSelfMsg = sender == selfDisplayName
+      if (ttsEnabled && !isSelfMsg && ttsPlayer.isSupported()) {
+        ttsPlayer.speak(text, { rate: 3 })
+      }
     }
     setChatMessages(prev => {
       const msgs = [...prev, {
         text: text,
         timestamp: new Date().toISOString(),
-        sender: sender ?? 'system'
+        sender: sender ?? SYSTEM_LOG
       }]
       return msgs.slice(-maxHistoryMessage)
     })
