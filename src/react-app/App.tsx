@@ -465,22 +465,21 @@ function App() {
           ref={(video) => {
             if (video) {
               video.disablePictureInPicture = false
+              video.onfullscreenchange = () => {
+                const onFullScreen = Boolean(document.fullscreenElement)
+                console.log(SYSTEM_LOG, `fullscreen ${onFullScreen}`)
+                if (isMoblie && onFullScreen) {
+                  video.play()
+                }
+              }
             }
           }}
           onClick={(ev) => {
-            console.log(PLAYER_LOG, 'video clicked')
+            if (!isMoblie) return
             const video = ev.target as HTMLVideoElement
-            if (isMoblie) {
-              if (!document.fullscreenElement) {
-                video.requestFullscreen()
-              }
-            }
-            if (video.paused) {
-              video.play()
-              video.muted = false
-            } else {
-              video.pause()
-            }
+            if (video.paused) video.play()
+            else video.pause()
+
           }}
           onDoubleClick={(ev) => {
             const video = ev.target as HTMLVideoElement
