@@ -463,23 +463,20 @@ function App() {
         <video id='video' autoPlay muted
           // Add reference for Safari PiP API
           ref={(video) => {
-            if (video) {
+            if (video && isMoblie) {
               video.disablePictureInPicture = false
-              video.onfullscreenchange = () => {
-                const onFullScreen = Boolean(document.fullscreenElement)
-                console.log(SYSTEM_LOG, `fullscreen ${onFullScreen}`)
-                if (isMoblie && onFullScreen) {
-                  video.play()
-                }
-              }
+              video.playsInline = true
             }
           }}
           onClick={(ev) => {
             if (!isMoblie) return
             const video = ev.target as HTMLVideoElement
-            if (video.paused) video.play()
-            else video.pause()
-
+            if (video.paused) {
+              video.requestPictureInPicture()
+              video.play()
+            } else {
+              video.pause()
+            }
           }}
           onDoubleClick={(ev) => {
             const video = ev.target as HTMLVideoElement
