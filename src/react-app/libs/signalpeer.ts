@@ -8,7 +8,6 @@ import {
 const broadcastInterval = getConfig().stream.broadcastInterval
 const SIGNAL_LABEL = getConfig().stream.signalLabel;
 const STUN_SERVERS = getConfig().api.stunServers;
-const BOOT_TAG = 'BootstrapPeer';
 const SIGNAL_TAG = 'SignalPeer';
 const DC_TAG = 'SignalDc';
 
@@ -171,7 +170,7 @@ export class SignalPeer {
     const peer = new RTCPeerConnection(this.config)
     const connected = new Promise((resolve, reject) => {
       peer.onconnectionstatechange = () => {
-        console.log(BOOT_TAG, `${this.bootstrapSid} ${peer.connectionState}`)
+        console.log(SIGNAL_TAG, `bootstrap ${this.bootstrapSid} ${peer.connectionState}`)
 
         const peerConnected = peer.connectionState == 'connected'
         const changed = lastConnected != peerConnected
@@ -219,7 +218,7 @@ export class SignalPeer {
     const peer = new RTCPeerConnection(this.config)
     const connected = new Promise((resolve, reject) => {
       peer.onconnectionstatechange = () => {
-        console.log(SIGNAL_TAG, `${this.signalSid} ${peer.connectionState}`)
+        console.log(SIGNAL_TAG, `signal ${this.signalSid} ${peer.connectionState}`)
 
         const failed = peer.connectionState == 'failed'
         const peerConnected = peer.connectionState == 'connected'
@@ -295,6 +294,7 @@ export class SignalPeer {
   }
 
   close(): void {
+    console.log(SIGNAL_LABEL, 'close')
     if (this.closed) return
     this.closed = true
     // do not notify user if close by self

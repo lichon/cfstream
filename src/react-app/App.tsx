@@ -46,6 +46,7 @@ function getVideoElement() {
 
 function App() {
   const ttsPlayer = new ChromeTTS()
+  const signalPeer = new SignalPeer()
   const [streamSession, setStreamSession] = useState<string | null>()
   const [playerSession, setPlayerSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
@@ -141,7 +142,7 @@ function App() {
         } else if (signalEvent.status == 'connected') {
           if (selfSid === signalEvent.sid) {
             signalConnected = true
-            addChatMessage(`signal connected`)
+            addChatMessage(`${signalEvent.sid} joined (self)`)
           } else {
             addChatMessage(`${signalEvent.sid} joined`)
           }
@@ -162,14 +163,14 @@ function App() {
         // signal publisher
         initDataChannel(playerSid, peer, null, SignalPeer.label).then(dc => {
           dc.onopen = () => {
-            console.log(APP_LOG, 'publisher open')
+            console.log(APP_LOG, 'publisher dc open')
           }
           setPlayerDc(dc)
         })
         // signal subscriber
         initDataChannel(playerSid, peer, sidParam).then(dc => {
           dc.onopen = () => {
-            console.log(APP_LOG, 'subscriber open')
+            console.log(APP_LOG, 'subscriber dc open')
           }
           dc.onmessage = async (ev) => {
             if (isDebug)
@@ -203,8 +204,7 @@ function App() {
   }
 
   function dataChannelSend(dc: RTCDataChannel, msg: SignalMessage, callback?: () => void) {
-    if (dc.readyState == 'open') {
-      const msgString = typeof msg === 'string' ? msg : JSON.stringify(msg)
+    if (dc.readyState == 'open') { const msgString = typeof msg === 'string' ? msg : JSON.stringify(msg)
       dc.send(msgString)
 
       if (isDebug)
@@ -214,7 +214,7 @@ function App() {
     }
   }
 
-  function initSignalPeer(signalPeer: SignalPeer, sessionId: string, broadcastDc: RTCDataChannel) {
+  function startSignalPeer(signalPeer: SignalPeer, sessionId: string, broadcastDc: RTCDataChannel) {
     let broadcastTimeout: NodeJS.Timeout
 
     signalPeer.onBootstrapReady(() => {
@@ -254,6 +254,7 @@ function App() {
       }
       // TODO supoprt rpc
     })
+    signalPeer.start()
   }
 
   function handleCmd(text: string): boolean {
@@ -428,6 +429,7 @@ function App() {
         setWHIPClient(null)
         setStreamSession(null)
       }
+      signalPeer.close()
       addChatMessage('client closed')
     }
   }
@@ -452,27 +454,24 @@ function App() {
       },
       peerConnectionFactory: (config: RTCConfiguration) => {
         const peer = new RTCPeerConnection(config)
-        const signalPeer = new SignalPeer()
         peer.addEventListener('connectionstatechange', () => {
+          console.log(APP_LOG, `client peer ${peer.connectionState}`)
           if (peer.connectionState == 'connected') {
             client.getResourceUrl().then(resUrl => {
               const sid = extractSessionIdFromUrl(resUrl)
               initDataChannel(sid!, peer).then(dc => {
                 dc.onclose = () => {
-                  console.log(DC_LOG, 'close')
+                  console.log(DC_LOG, 'client dc close')
                 }
                 dc.onopen = () => {
-                  console.log(DC_LOG, 'open')
-                  initSignalPeer(signalPeer, sid!, dc)
-                  signalPeer.start()
+                  console.log(DC_LOG, 'client dc open')
+                  startSignalPeer(signalPeer, sid!, dc)
                 }
                 setStreamerDc(dc)
               })
             })
-            setVideoBitrate(peer, videoTrack)
             addChatMessage('client connected')
-          } else if (peer.connectionState == 'closed') {
-            signalPeer.close()
+            setVideoBitrate(peer, videoTrack)
           }
         })
         return peer
