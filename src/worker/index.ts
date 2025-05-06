@@ -57,6 +57,12 @@ interface PatchRequest {
   tracks?: Track[]
 }
 
+interface LiveRoom {
+  name: string
+  secret: string
+  sid: string
+}
+
 const randomUUID = () => {
   const array = new Uint8Array(16)
   crypto.getRandomValues(array)
@@ -117,6 +123,27 @@ const sendWebHook = async (hookURL: string, message: string) => {
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/api', (c) => c.text(randomUUID()))
+
+// api create live room
+app.post('/api/rooms/:name', async (c) => {
+  const name = c.req.param('name')
+  if (!name?.length || name === 'null' || name === 'undefined') {
+    return c.text('', 404)
+  }
+  const liveRoom = await c.req.json() as LiveRoom
+  setLiveSession(c.env.KVASA, name, liveRoom.sid)
+  return c.json({}, 200)
+})
+
+// api get room info
+app.get('/api/rooms/:name', async (c) => {
+  const name = c.req.param('name')
+  if (!name?.length || name === 'null' || name === 'undefined') {
+    return c.text('', 404)
+  }
+  const sid = await getLiveSession(c.env.KVASA, name)
+  return sid?.length ? c.text(sid, 200) : c.text('', 404)
+})
 
 // api create session
 app.post('/api/sessions', async (c) => {
@@ -249,6 +276,15 @@ app.get('/api/sessions/:sid', async (c) => {
   status.subs = subs.length ? subs : []
   return c.json(status)
 })
+
+// session name caches
+async function getLiveSession(kv: KVNamespace, name: string) {
+  return await kv.get('live:' + name)
+}
+
+async function setLiveSession(kv: KVNamespace, name: string, sid: string) {
+  return await kv.put('live:' + name, sid, { expirationTtl: 36000 })
+}
 
 // session secret caches
 async function delSessionSecret(kv: KVNamespace, sid: string) {

@@ -5,8 +5,9 @@ interface IceServer {
 
 export interface AppConfig {
   api: {
-    baseUrl: string
     host: string
+    roomUrl: string
+    sessionUrl: string
     stunServers: IceServer[]
   }
   player: {
@@ -35,7 +36,8 @@ export interface AppConfig {
 const defaultConfig: AppConfig = {
   api: {
     host: import.meta.env.VITE_API_HOST || window.location.host,
-    baseUrl: '/api/sessions',
+    roomUrl: '/api/rooms',
+    sessionUrl: '/api/sessions',
     stunServers: [{ urls: 'stun:stun.cloudflare.com:3478' }]
   },
   player: {

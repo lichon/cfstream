@@ -1,6 +1,7 @@
 import { getConfig } from '../config'
 
-const API_BASE = getConfig().api.baseUrl
+const ROOM_API = getConfig().api.roomUrl
+const SESSION_API = getConfig().api.sessionUrl
 const BROADCAST_LABEL = getConfig().stream.broadcastLabel
 
 interface Track {
@@ -38,12 +39,14 @@ export interface NewSessionResponse {
 export function getSessionUrl(sid?: string | null): string {
   const apiHost = import.meta.env.VITE_API_HOST || window.location.host
   const protocol = window.location.protocol
-  return `${protocol}//${apiHost}${API_BASE}` + (sid ? `/${sid}` : '')
+  return `${protocol}//${apiHost}${SESSION_API}` + (sid ? `/${sid}` : '')
 }
 
-export function getPlayerUrl(sid?: string | null): string {
+export function getPlayerUrl(sid?: string, name?: string): string {
   const playerHost = import.meta.env.VITE_PLAYER_HOST || window.location.host
   const protocol = window.location.protocol
+  if (name?.length)
+    return `${protocol}//${playerHost}?name=${name}`
   return `${protocol}//${playerHost}` + (sid ? `?sid=${sid}` : '')
 }
 
@@ -52,7 +55,7 @@ export function extractSessionIdFromUrl(url: string | null): string | undefined 
 }
 
 export async function createSession(offerSdp: string | undefined): Promise<NewSessionResponse | null> {
-  const res = await fetch(API_BASE, {
+  const res = await fetch(SESSION_API, {
     method: 'POST',
     body: offerSdp
   })
@@ -69,7 +72,7 @@ export async function createSession(offerSdp: string | undefined): Promise<NewSe
 }
 
 export async function kickSignalSession(sid: string, sdp: string): Promise<Response> {
-  return fetch(`${API_BASE}/${sid}`, {
+  return fetch(`${SESSION_API}/${sid}`, {
     method: 'PATCH',
     body: sdp
   })
@@ -79,7 +82,7 @@ export async function createDataChannel(
   sid: string, 
   configs?: DataChannelConfig[],
 ): Promise<{ dataChannels: { id: number }[] }> {
-  const res = await fetch(`${API_BASE}/${sid}`, {
+  const res = await fetch(`${SESSION_API}/${sid}`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json'
@@ -90,8 +93,21 @@ export async function createDataChannel(
 }
 
 export async function getSessionInfo(sid: string): Promise<SessionStatus> {
-  const res = await fetch(`${API_BASE}/${sid}`);
-  return res.json();
+  const res = await fetch(`${SESSION_API}/${sid}`)
+  return res.json()
+}
+
+export async function setSessionByName(name: string, sid: string) {
+  const res = await fetch(`${ROOM_API}/${name}`, {
+    method: 'POST',
+    body: JSON.stringify({ name: name, sid: sid, })
+  })
+  return res.json()
+}
+
+export async function getSessionByName(name: string): Promise<string> {
+  const res = await fetch(`${ROOM_API}/${name}`)
+  return res.text()
 }
 
 export async function initDataChannel(

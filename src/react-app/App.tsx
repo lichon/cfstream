@@ -18,11 +18,14 @@ import {
   getSessionUrl,
   getPlayerUrl,
   extractSessionIdFromUrl,
+  getSessionByName,
+  setSessionByName,
 } from './libs/api'
 
 let _firstLoad = true
-// const nameParam = new URLSearchParams(window.location.search).get('name')
-const sidParam = new URLSearchParams(window.location.search).get('sid')
+let sidParam = new URLSearchParams(window.location.search).get('sid') || undefined
+const nameParam = new URLSearchParams(window.location.search).get('name') || undefined
+const roomParam = new URLSearchParams(window.location.search).get('room') || undefined
 const SYSTEM_LOG = 'System'
 const APP_LOG = 'App'
 const DC_LOG = 'DataChannel'
@@ -47,16 +50,16 @@ function getVideoElement() {
 function App() {
   const ttsPlayer = new ChromeTTS()
   const signalPeer = new SignalPeer()
-  const [streamSession, setStreamSession] = useState<string | null>()
-  const [playerSession, setPlayerSession] = useState<string | null>()
-  const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
-  const [whepPlayer, setWHEPPlayer] = useState<WebRTCPlayer | null>()
+  const [streamSession, setStreamSession] = useState<string>()
+  const [playerSession, setPlayerSession] = useState<string>()
+  const [whipClient, setWHIPClient] = useState<WHIPClient>()
+  const [whepPlayer, setWHEPPlayer] = useState<WebRTCPlayer>()
   const [qrVisible, setQrVisible] = useState(false)
   const [logVisible, setLogVisible] = useState(false)
   const [chatVisible, setChatVisible] = useState(true)
   const [showHoverMenu, setShowHoverMenu] = useState(false)
-  const [playerDc, setPlayerDc] = useState<RTCDataChannel | null>()
-  const [streamerDc, setStreamerDc] = useState<RTCDataChannel | null>()
+  const [playerDc, setPlayerDc] = useState<RTCDataChannel>()
+  const [streamerDc, setStreamerDc] = useState<RTCDataChannel>()
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isScreenShare, setScreenShare] = useState(true);
@@ -92,16 +95,25 @@ function App() {
   function stop() {
     if (whepPlayer) {
       whepPlayer.destroy()
-      setWHEPPlayer(null)
-      setStreamSession(null)
-      setPlayerDc(null)
+      setWHEPPlayer(undefined)
+      setStreamSession(undefined)
+      setPlayerDc(undefined)
     }
   }
 
   async function play() {
     const video = getVideoElement()
-    if (whepPlayer || !video || !sidParam?.length)
+    if (whepPlayer || !video)
       return
+
+    if (nameParam?.length) {
+      sidParam = await getSessionByName(nameParam)
+    }
+
+    if (!sidParam?.length) {
+      addChatMessage('session not found')
+      return
+    }
 
     const player = new WebRTCPlayer({
       debug: false,
@@ -117,9 +129,9 @@ function App() {
     player.on('no-media', () => {
       addChatMessage('media timeout')
       player.destroy()
-      setWHEPPlayer(null)
-      setStreamSession(null)
-      setPlayerDc(null)
+      setWHEPPlayer(undefined)
+      setStreamSession(undefined)
+      setPlayerDc(undefined)
     })
     player.load(new URL(getSessionUrl(sidParam))).then(() => {
       const playerObj = player as never
@@ -421,13 +433,19 @@ function App() {
     return ret
   }
 
+  async function setSessionName(sid: string) {
+    if (!roomParam?.length)
+      return
+    setSessionByName(roomParam, sid)
+  }
+
   async function stopStream() {
     if (whipClient) {
       try {
         await whipClient.destroy()
       } finally {
-        setWHIPClient(null)
-        setStreamSession(null)
+        setWHIPClient(undefined)
+        setStreamSession(undefined)
       }
       signalPeer.close()
       addChatMessage('client closed')
@@ -437,8 +455,6 @@ function App() {
   async function startStream(shareScreen?: boolean) {
     setShowHoverMenu(false)
     const video = getVideoElement()
-    if (!video)
-      throw Error('video tag not found')
 
     addChatMessage('getting media from user')
     const mediaStream = await getMediaStream(shareScreen)
@@ -469,6 +485,7 @@ function App() {
                 }
                 setStreamerDc(dc)
               })
+              setSessionName(sid!)
             })
             addChatMessage('client connected')
             setVideoBitrate(peer, videoTrack)
@@ -480,7 +497,7 @@ function App() {
     addChatMessage('client starting')
     await client.setIceServersFromEndpoint()
     await client.ingest(mediaStream)
-    video.srcObject = mediaStream
+    video!.srcObject = mediaStream
     const resourceUrl = await client.getResourceUrl()
     setStreamSession(extractSessionIdFromUrl(resourceUrl))
     setWHIPClient(client)
@@ -529,7 +546,7 @@ function App() {
               if (!streamSession?.length)
                 return
 
-              const playerUrl = getPlayerUrl(streamSession)
+              const playerUrl = getPlayerUrl(streamSession, roomParam || nameParam)
               if (openLinkOnShare) {
                 window.open(playerUrl, '_blank')
               }
@@ -587,7 +604,7 @@ function App() {
         onSend={(text) => sendChatMessage(text)}
       />
       <QROverlay
-        url={`${getPlayerUrl(streamSession)}`}
+        url={`${getPlayerUrl(streamSession, roomParam || nameParam)}`}
         show={qrVisible}
         onClose={() => setQrVisible(false)}
       />
