@@ -130,8 +130,9 @@ app.post('/api/sessions', async (c) => {
     return c.text('new tracks error', 500)
   })
   const tracksRes = await res.json() as TracksResponse
+  const hasMedia = sdp.includes('m=audio') || sdp.includes('m=video')
 
-  console.log('new session', sid)
+  console.log(`new ${hasMedia ? 'stream' : 'dc'} session ${sid}`)
   if (c.env.WEB_HOOK?.length) {
     await sendWebHook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}_`)
   }
@@ -203,7 +204,7 @@ app.delete('/api/sessions/:secret/:sid', async (c) => {
     await sendWebHook(c.env.WEB_HOOK, `session end ${sid}`)
   }
   await delSessionSecret(c.env.KVASA, sid)
-  console.log('delete session', sid)
+  console.log(`del stream session ${sid}`)
   return c.json({}, 200)
 })
 
@@ -245,7 +246,7 @@ app.get('/api/sessions/:sid', async (c) => {
   }
   const subs = await getSessionSubs(c.env.KVASA, sid)
   const status = await getSessionStatus(c.env.RTC_API_TOKEN, sid)
-  status.subs = subs ? [subs] : []
+  status.subs = subs.length ? subs : []
   return c.json(status)
 })
 
@@ -263,13 +264,16 @@ async function putSessionSecret(kv: KVNamespace, sid: string, secret: string) {
 }
 
 // session subs cache
-async function getSessionSubs(kv: KVNamespace, sid: string) {
-  return await kv.get('subs:' + sid)
+async function getSessionSubs(kv: KVNamespace, sid: string): Promise<string[]> {
+  // limit 20
+  const subs = await kv.list({ prefix: `subs:${sid}`, limit: 20 })
+  console.log(`session subs ${sid} ${JSON.stringify(subs.keys)}`)
+  return subs.keys.map(k => k.name.split(':')[2])
 }
 
 async function putSessionSubs(kv: KVNamespace, sid: string, subSid: string) {
   // TODO support multiple subs, maybe use kv.list with key prefix
-  await kv.put('subs:' + sid, subSid, { expirationTtl: 600 })
+  await kv.put(`subs:${sid}:${subSid}`, subSid, { expirationTtl: 300 })
 }
 
 // session utils
@@ -291,9 +295,9 @@ async function getSessionStatus(token: string, sid: string) {
 // sdp experiment
 interface MediaSdp {
   m: string
-  sendOrRecv: string
   mid: string
   ice: string[]
+  sendOrRecv: string
   content: string[]
 }
 

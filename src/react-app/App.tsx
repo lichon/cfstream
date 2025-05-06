@@ -25,6 +25,7 @@ const sidParam = new URLSearchParams(window.location.search).get('sid')
 const SYSTEM_LOG = 'System'
 const STREAMER_LOG = 'Streamer'
 const PLAYER_LOG = 'Player'
+const DC_LOG = 'DC'
 const ttsPlayer = new ChromeTTS()
 
 const chatCmdList = getConfig().ui.cmdList
@@ -37,6 +38,7 @@ const stunServers = getConfig().api.stunServers
 const isMoblie = getConfig().ui.isMobilePlatform
 const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
+const isDebug = getConfig().debug
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')
@@ -58,6 +60,7 @@ function App() {
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isScreenShare, setScreenShare] = useState(true);
   const [ttsEnabled, enableTTS] = useState(true);
+  const [playerSignalConnected, setPlayerSignalConnected] = useState(false);
 
   useEffect(() => {
     if (!_firstLoad) return
@@ -123,18 +126,21 @@ function App() {
       const bootstrapDc = anyPeer['bootstrapDc'] as RTCDataChannel
       const peer = anyPeer as RTCPeerConnection
 
-      const kickedSid = new Set<string>()
+      let signalConnected = false
+      let lastKick: number = 0
       async function handleSignalEvent(event: SignalMessage, selfSid: string) {
+        const now = Date.now()
         const signalEvent = event.content as SignalEvent
         if (signalEvent.status == 'waiting') {
-          if (kickedSid.has(signalEvent.sid)) return
+          if (signalConnected || now - lastKick < 60000) return
           if (await SignalPeer.kick(signalEvent.sid)) {
-            addChatMessage(`signal waiting`)
-            kickedSid.add(signalEvent.sid)
+            console.log(PLAYER_LOG, `${signalEvent.sid} kicked`)
+            lastKick = now
           }
         } else if (signalEvent.status == 'connected') {
           if (selfSid === signalEvent.sid) {
             addChatMessage(`signal connected`)
+            signalConnected = true
           }
         }
       }
@@ -163,7 +169,8 @@ function App() {
             console.log(PLAYER_LOG, 'broadcast listener open')
           }
           dc.onmessage = async (ev) => {
-            console.log(PLAYER_LOG, 'recv msg', ev.data as string)
+            if (isDebug)
+              console.log(DC_LOG, 'recv <<<', ev.data as string)
             const event = JSON.parse(ev.data) as SignalMessage
             if (event.type == 'signal') {
               handleSignalEvent(event, playerSid)
@@ -191,21 +198,36 @@ function App() {
     })
   }
 
-  function broadcastSignalSid(signalPeer: SignalPeer, broadcastDc: RTCDataChannel) {
-    if (signalPeer.isConnected() && broadcastDc.readyState == 'open') {
-      const sid = signalPeer.getSessionId()
-      broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('waiting', sid!)))
-      setTimeout(() => broadcastSignalSid(signalPeer, broadcastDc), broadcastInterval)
+  function dataChannelSend(dc: RTCDataChannel, msg: SignalMessage, callback?: () => void) {
+    if (dc.readyState == 'open') {
+      const msgString = typeof msg === 'string' ? msg : JSON.stringify(msg)
+      dc.send(msgString)
+
+      if (isDebug)
+        console.log(DC_LOG, `send >>>`, msgString)
+
+      if (callback) callback()
     }
   }
 
   function initSignalPeer(client: WHIPClient, broadcastDc: RTCDataChannel) {
     const signalPeer = new SignalPeer()
+    let broadcastTimeout: NodeJS.Timeout
+
     signalPeer.onBootstrapReady(() => {
+      clearTimeout(broadcastTimeout)
       // bootstrap connected, broadcast self to subs
-      broadcastSignalSid(signalPeer, broadcastDc)
+      const bootSid = signalPeer.getBroadcastSid()
+      const signalEvent = SignalPeer.newSignalEvent('waiting', bootSid!)
+      const callback = () => {
+        broadcastTimeout = setTimeout(() => {
+          dataChannelSend(broadcastDc, signalEvent, callback)
+        }, broadcastInterval)
+      }
+      dataChannelSend(broadcastDc, signalEvent, callback)
     })
     signalPeer.onBootstrapKicked(() => {
+      clearTimeout(broadcastTimeout)
       // bootstrap kicked, connect signal to new sub
       client.getResourceUrl().then(resUrl => {
         const sid = resUrl.split('/').pop()
@@ -217,18 +239,18 @@ function App() {
     })
     signalPeer.onOpen((sid: string) => {
       addChatMessage(`${sid} joined`)
-      broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('connected', sid)))
+      dataChannelSend(broadcastDc, SignalPeer.newSignalEvent('connected', sid))
     })
     signalPeer.onClose((sid: string) => {
       addChatMessage(`${sid} left`)
-      broadcastDc.send(JSON.stringify(SignalPeer.newSignalEvent('disconnected', sid)))
+      dataChannelSend(broadcastDc, SignalPeer.newSignalEvent('disconnected', sid))
     })
     signalPeer.onMessage((sid: string, ev) => {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'chat') {
         addChatMessage(msg.content, sid)
         // broadcast to all subs
-        broadcastDc.send(ev.data)
+        dataChannelSend(broadcastDc, ev.data)
       }
       // TODO supoprt rpc
     })
@@ -288,15 +310,16 @@ function App() {
       return
     }
     const msgObject = SignalPeer.newChatMsg(text, sender)
-    if (playerSignalDc && playerSignalDc.readyState == 'open') {
+    if (playerSignalDc) {
       msgObject.sender = playerSession!
-      playerSignalDc.send(JSON.stringify(msgObject))
+      dataChannelSend(playerSignalDc, msgObject)
       return
     }
-    if (broadcastDc && broadcastDc.readyState == 'open') {
+    if (broadcastDc) {
       msgObject.sender = sender ?? ownerDisplayName
-      broadcastDc.send(JSON.stringify(msgObject))
-      addChatMessage(text, sender ?? selfDisplayName)
+      dataChannelSend(broadcastDc, msgObject, () => {
+        addChatMessage(text, sender ?? selfDisplayName)
+      })
       return
     }
   }
