@@ -60,7 +60,6 @@ function App() {
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isScreenShare, setScreenShare] = useState(true);
   const [ttsEnabled, enableTTS] = useState(true);
-  const [playerSignalConnected, setPlayerSignalConnected] = useState(false);
 
   useEffect(() => {
     if (!_firstLoad) return
