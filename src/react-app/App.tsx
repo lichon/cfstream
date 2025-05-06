@@ -437,7 +437,10 @@ function App() {
   async function setSessionName(sid: string) {
     if (!roomParam?.length)
       return
-    setSessionByName(roomParam, sid)
+    const res = await setSessionByName(roomParam, sid)
+    if (res.status == 200) {
+      addChatMessage(`set room ${roomParam} session to ${sid}`)
+    }
   }
 
   async function stopStream() {

@@ -102,7 +102,7 @@ export async function setSessionByName(name: string, sid: string) {
     method: 'POST',
     body: JSON.stringify({ name: name, sid: sid, })
   })
-  return res.json()
+  return res
 }
 
 export async function getSessionByName(name: string): Promise<string> {
