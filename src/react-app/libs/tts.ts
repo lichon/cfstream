@@ -13,6 +13,7 @@ export class ChromeTTS {
     this.voices = [];
     this.onVoicesLoaded = null;
 
+    if (!this.isSupported()) return;
     window.speechSynthesis.onvoiceschanged = () => {
       this.voices = window.speechSynthesis.getVoices();
       if (this.onVoicesLoaded) {
