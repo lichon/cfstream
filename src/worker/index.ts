@@ -128,10 +128,10 @@ app.get('/api', (c) => c.text(randomUUID()))
 app.post('/api/rooms/:name', async (c) => {
   const name = c.req.param('name')
   if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.text('', 404)
+    return c.text('invalid room', 404)
   }
   const liveRoom = await c.req.json() as LiveRoom
-  setLiveSession(c.env.KVASA, name, liveRoom.sid)
+  await setLiveSession(c.env.KVASA, name, liveRoom.sid)
   return c.json({}, 200)
 })
 
@@ -139,10 +139,10 @@ app.post('/api/rooms/:name', async (c) => {
 app.get('/api/rooms/:name', async (c) => {
   const name = c.req.param('name')
   if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.text('', 404)
+    return c.text('invalid room', 404)
   }
   const sid = await getLiveSession(c.env.KVASA, name)
-  return sid?.length ? c.text(sid, 200) : c.text('', 404)
+  return sid?.length ? c.text(sid, 200) : c.text('room not found', 404)
 })
 
 // api create session
