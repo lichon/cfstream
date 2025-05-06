@@ -108,10 +108,11 @@ function App() {
 
     if (nameParam?.length) {
       sidParam = await getSessionByName(nameParam)
+      if (!sidParam?.length)
+        addChatMessage('session not found')
     }
 
     if (!sidParam?.length) {
-      addChatMessage('session not found')
       return
     }
 

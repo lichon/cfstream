@@ -121,7 +121,7 @@ export async function initDataChannel(
     location: remoteSid ? 'remote' : 'local',
     dataChannelName: label ?? BROADCAST_LABEL,
   }])
-  if (!dcRes.dataChannels.length) {
+  if (!dcRes.dataChannels.length || !dcRes.dataChannels[0].id) {
     // never open dc
     return new RTCDataChannel()
   }
