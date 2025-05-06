@@ -267,7 +267,6 @@ async function putSessionSecret(kv: KVNamespace, sid: string, secret: string) {
 async function getSessionSubs(kv: KVNamespace, sid: string): Promise<string[]> {
   // limit 20
   const subs = await kv.list({ prefix: `subs:${sid}`, limit: 20 })
-  console.log(`session subs ${sid} ${JSON.stringify(subs.keys)}`)
   return subs.keys.map(k => k.name.split(':')[2])
 }
 

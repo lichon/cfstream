@@ -13,7 +13,7 @@ export class ChromeTTS {
     this.voices = [];
     this.onVoicesLoaded = null;
 
-    if (!this.isSupported()) return;
+    if (!ChromeTTS.isSupported()) return;
     window.speechSynthesis.onvoiceschanged = () => {
       this.voices = window.speechSynthesis.getVoices();
       if (this.onVoicesLoaded) {
@@ -62,7 +62,7 @@ export class ChromeTTS {
     window.speechSynthesis.cancel();
   }
 
-  public isSupported(): boolean {
+  static isSupported(): boolean {
     return 'speechSynthesis' in window;
   }
 }

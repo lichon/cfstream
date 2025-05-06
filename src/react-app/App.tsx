@@ -21,12 +21,11 @@ import {
 } from './libs/api'
 
 let _firstLoad = true
+// const nameParam = new URLSearchParams(window.location.search).get('name')
 const sidParam = new URLSearchParams(window.location.search).get('sid')
 const SYSTEM_LOG = 'System'
-const STREAMER_LOG = 'Streamer'
-const PLAYER_LOG = 'Player'
-const DC_LOG = 'DC'
-const ttsPlayer = new ChromeTTS()
+const APP_LOG = 'App'
+const DC_LOG = 'DataChannel'
 
 const chatCmdList = getConfig().ui.cmdList
 const broadcastInterval = getConfig().stream.broadcastInterval
@@ -38,6 +37,7 @@ const stunServers = getConfig().api.stunServers
 const isMoblie = getConfig().ui.isMobilePlatform
 const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
+const ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
 const isDebug = getConfig().debug
 
 function getVideoElement() {
@@ -45,6 +45,7 @@ function getVideoElement() {
 }
 
 function App() {
+  const ttsPlayer = new ChromeTTS()
   const [streamSession, setStreamSession] = useState<string | null>()
   const [playerSession, setPlayerSession] = useState<string | null>()
   const [whipClient, setWHIPClient] = useState<WHIPClient | null>()
@@ -59,7 +60,6 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isScreenShare, setScreenShare] = useState(true);
-  const [ttsEnabled, enableTTS] = useState(true);
 
   useEffect(() => {
     if (!_firstLoad) return
@@ -75,6 +75,10 @@ function App() {
         setQrVisible(false)
       } else if (event.key === 'Enter') {
         setChatVisible(true)
+      } else if (event.key === 'm') {
+        const v = getVideoElement()
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        v?.muted ? handleCmd('/unmute') : handleCmd('/mute')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -99,7 +103,6 @@ function App() {
     if (whepPlayer || !video || !sidParam?.length)
       return
 
-    enableTTS(false)
     const player = new WebRTCPlayer({
       debug: false,
       video: video,
@@ -110,7 +113,7 @@ function App() {
     setWHEPPlayer(player)
     setStreamSession(sidParam)
 
-    addChatMessage(`player loading ${sidParam}`)
+    addChatMessage(`loading ${sidParam}`)
     player.on('no-media', () => {
       addChatMessage('media timeout')
       player.destroy()
@@ -133,14 +136,18 @@ function App() {
         if (signalEvent.status == 'waiting') {
           if (signalConnected || now - lastKick < 60000) return
           if (await SignalPeer.kick(signalEvent.sid)) {
-            console.log(PLAYER_LOG, `${signalEvent.sid} kicked`)
+            console.log(APP_LOG, `${signalEvent.sid} kicked`)
             lastKick = now
           }
         } else if (signalEvent.status == 'connected') {
           if (selfSid === signalEvent.sid) {
-            addChatMessage(`signal connected`)
             signalConnected = true
+            addChatMessage(`signal connected`)
+          } else {
+            addChatMessage(`${signalEvent.sid} joined`)
           }
+        } else if (signalEvent.status == 'disconnected') {
+            addChatMessage(`${signalEvent.sid} left`)
         }
       }
 
@@ -148,24 +155,22 @@ function App() {
         const resourceUrl = playerAdapter['resource'] as string
         const playerSid = extractSessionIdFromUrl(resourceUrl)
         setPlayerSession(playerSid)
-        addChatMessage(`player connected ${playerSid}`)
         return playerSid!
       }
 
-      function createSignalDc(playerSid: string) {
+      function initPlayerSignal() {
+        const playerSid = getPlayerSession()
+        // signal publisher
         initDataChannel(playerSid, peer, null, SignalPeer.label).then(dc => {
           dc.onopen = () => {
-            console.log(PLAYER_LOG, 'signalDc open')
+            console.log(APP_LOG, 'publisher open')
           }
           setPlayerSignalDc(dc)
         })
-      }
-
-      function createBroadcastListener(playerSid: string) {
-        setPlayerSession(playerSid)
+        // signal subscriber
         initDataChannel(playerSid, peer, sidParam).then(dc => {
           dc.onopen = () => {
-            console.log(PLAYER_LOG, 'broadcast listener open')
+            console.log(APP_LOG, 'subscriber open')
           }
           dc.onmessage = async (ev) => {
             if (isDebug)
@@ -174,7 +179,9 @@ function App() {
             if (event.type == 'signal') {
               handleSignalEvent(event, playerSid)
             } else if (event.type == 'chat') {
-              addChatMessage(event.content as string, event.sender == playerSid ? selfDisplayName : event.sender)
+              const text = event.content as string
+              const sender = event.sender == playerSid ? selfDisplayName : event.sender
+              addChatMessage(text, sender)
             }
           }
         })
@@ -188,11 +195,10 @@ function App() {
       }
 
       bootstrapDc.onopen = () => {
-        console.log(PLAYER_LOG, 'bootstarp open')
-        const playerSid = getPlayerSession()
+        addChatMessage(`connected ${sidParam}`)
+        console.log(APP_LOG, 'bootstarp open')
         jitterBufferConfig()
-        createSignalDc(playerSid)
-        createBroadcastListener(playerSid)
+        initPlayerSignal()
       }
     })
   }
@@ -257,7 +263,7 @@ function App() {
     signalPeer.start()
   }
 
-  function handleCmdFromChat(text: string): boolean {
+  function handleCmd(text: string): boolean {
     if (chatCmdList.has(text)) {
       const v = getVideoElement()!
       switch (text) {
@@ -304,20 +310,20 @@ function App() {
     return false
   }
 
-  function sendChatMessage(text: string, sender?: string) {
-    if (handleCmdFromChat(text)) {
+  function sendChatMessage(text: string) {
+    if (handleCmd(text)) {
       return
     }
-    const msgObject = SignalPeer.newChatMsg(text, sender)
+    const msgObject = SignalPeer.newChatMsg(text)
     if (playerSignalDc) {
       msgObject.sender = playerSession!
       dataChannelSend(playerSignalDc, msgObject)
       return
     }
     if (broadcastDc) {
-      msgObject.sender = sender ?? ownerDisplayName
+      msgObject.sender = ownerDisplayName
       dataChannelSend(broadcastDc, msgObject, () => {
-        addChatMessage(text, sender ?? selfDisplayName)
+        addChatMessage(text, selfDisplayName)
       })
       return
     }
@@ -329,7 +335,7 @@ function App() {
       console.log(SYSTEM_LOG, text)
     } else {
       const isSelfMsg = sender == selfDisplayName
-      if (ttsEnabled && !isSelfMsg && ttsPlayer.isSupported()) {
+      if (ttsEnabled && !isSelfMsg) {
         ttsPlayer.speak(text, { rate: 3 })
       }
     }
@@ -350,7 +356,7 @@ function App() {
       initDataChannel(sid, peer).then(dc => {
         setBroadcastDc(dc)
         dc.onopen = () => {
-          console.log(STREAMER_LOG, 'broadcastDc open')
+          console.log(APP_LOG, 'broadcastDc open')
           initSignalPeer(client, dc)
         }
       })
@@ -359,19 +365,19 @@ function App() {
 
   function setVideoBitrate(peer: RTCPeerConnection, videoTrack?: MediaStreamTrack) {
     if (!videoTrack) {
-      console.error(STREAMER_LOG, 'no video track')
+      console.error(APP_LOG, 'no video track')
       return
     }
     const sender = peer.getSenders().find(s => s.track?.id == videoTrack.id)
     if (sender) {
-      console.log(STREAMER_LOG, 'set sender maxBitrate')
+      console.log(APP_LOG, 'set sender maxBitrate')
       const params = sender.getParameters()
       params.encodings = [{
         maxBitrate: videoMaxBitrate,
       }]
       sender.setParameters(params)
     } else {
-      console.log(STREAMER_LOG, 'failed to get sender', peer)
+      console.log(APP_LOG, 'failed to get sender', peer)
     }
   }
 
@@ -460,7 +466,7 @@ function App() {
     addChatMessage('getting media from user')
     const mediaStream = await getMediaStream(shareScreen)
     const videoTrack = mediaStream.getVideoTracks().find(t => t.enabled)
-    console.log(STREAMER_LOG, `video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
+    console.log(APP_LOG, `video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
 
     const client = new WHIPClient({
       endpoint: getSessionUrl(),

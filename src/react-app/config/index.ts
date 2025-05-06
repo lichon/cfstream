@@ -20,6 +20,7 @@ export interface AppConfig {
     signalLabel: string
   }
   ui: {
+    ttsEnabled: boolean
     streamOwnerDisplayName: string
     selfDisplayName: string
     maxHistoryMessage: number
@@ -48,6 +49,7 @@ const defaultConfig: AppConfig = {
     signalLabel: 'signal',
   },
   ui: {
+    ttsEnabled: true,
     streamOwnerDisplayName: 'Owner',
     selfDisplayName: 'You',
     maxHistoryMessage: 1000,

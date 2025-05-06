@@ -19,7 +19,7 @@ type StatusCallback = (sid: string) => void;
 type NotifyCallback = () => void;
 
 type SignalMessageType = 'signal' | 'chat' | 'rpc';
-type SignalStatus = 'waiting' | 'connected' | 'disonnected';
+type SignalStatus = 'waiting' | 'connected' | 'disconnected';
 
 export interface SignalEvent {
   sid: string;
