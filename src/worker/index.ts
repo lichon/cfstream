@@ -260,7 +260,7 @@ async function getSessionSecret(kv: KVNamespace, sid: string) {
 }
 
 async function putSessionSecret(kv: KVNamespace, sid: string, secret: string) {
-  await kv.put('secret:' + sid, secret)
+  await kv.put('secret:' + sid, secret, { expirationTtl: 36000 })
 }
 
 // session subs cache
@@ -272,7 +272,7 @@ async function getSessionSubs(kv: KVNamespace, sid: string): Promise<string[]> {
 
 async function putSessionSubs(kv: KVNamespace, sid: string, subSid: string) {
   // TODO support multiple subs, maybe use kv.list with key prefix
-  await kv.put(`subs:${sid}:${subSid}`, subSid, { expirationTtl: 300 })
+  await kv.put(`subs:${sid}:${subSid}`, subSid, { expirationTtl: 3600 })
 }
 
 // session utils

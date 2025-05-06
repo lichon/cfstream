@@ -54,9 +54,8 @@ function App() {
   const [logVisible, setLogVisible] = useState(false)
   const [chatVisible, setChatVisible] = useState(true)
   const [showHoverMenu, setShowHoverMenu] = useState(false)
-  const [signalPeer, setSignalPeer] = useState<SignalPeer | null>()
-  const [playerSignalDc, setPlayerSignalDc] = useState<RTCDataChannel | null>()
-  const [broadcastDc, setBroadcastDc] = useState<RTCDataChannel | null>()
+  const [playerDc, setPlayerDc] = useState<RTCDataChannel | null>()
+  const [streamerDc, setStreamerDc] = useState<RTCDataChannel | null>()
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isScreenShare, setScreenShare] = useState(true);
@@ -94,7 +93,7 @@ function App() {
       whepPlayer.destroy()
       setWHEPPlayer(null)
       setStreamSession(null)
-      setPlayerSignalDc(null)
+      setPlayerDc(null)
     }
   }
 
@@ -119,7 +118,7 @@ function App() {
       player.destroy()
       setWHEPPlayer(null)
       setStreamSession(null)
-      setPlayerSignalDc(null)
+      setPlayerDc(null)
     })
     player.load(new URL(getSessionUrl(sidParam))).then(() => {
       const playerObj = player as never
@@ -165,7 +164,7 @@ function App() {
           dc.onopen = () => {
             console.log(APP_LOG, 'publisher open')
           }
-          setPlayerSignalDc(dc)
+          setPlayerDc(dc)
         })
         // signal subscriber
         initDataChannel(playerSid, peer, sidParam).then(dc => {
@@ -215,8 +214,7 @@ function App() {
     }
   }
 
-  function initSignalPeer(client: WHIPClient, broadcastDc: RTCDataChannel) {
-    const signalPeer = new SignalPeer()
+  function initSignalPeer(signalPeer: SignalPeer, sessionId: string, broadcastDc: RTCDataChannel) {
     let broadcastTimeout: NodeJS.Timeout
 
     signalPeer.onBootstrapReady(() => {
@@ -234,12 +232,9 @@ function App() {
     signalPeer.onBootstrapKicked(() => {
       clearTimeout(broadcastTimeout)
       // bootstrap kicked, connect signal to new sub
-      client.getResourceUrl().then(resUrl => {
-        const sid = resUrl.split('/').pop()
-        return getSessionInfo(sid || '')
-      }).then(info => {
+      getSessionInfo(sessionId).then(info => {
         info.subs.forEach(sid => signalPeer.newSignalDc(sid))
-        signalPeer.clearInvalidDc(info.subs)
+        // signalPeer.clearInvalidDc(info.subs)
       })
     })
     signalPeer.onOpen((sid: string) => {
@@ -259,8 +254,6 @@ function App() {
       }
       // TODO supoprt rpc
     })
-    setSignalPeer(signalPeer)
-    signalPeer.start()
   }
 
   function handleCmd(text: string): boolean {
@@ -315,14 +308,14 @@ function App() {
       return
     }
     const msgObject = SignalPeer.newChatMsg(text)
-    if (playerSignalDc) {
+    if (playerDc) {
       msgObject.sender = playerSession!
-      dataChannelSend(playerSignalDc, msgObject)
+      dataChannelSend(playerDc, msgObject)
       return
     }
-    if (broadcastDc) {
+    if (streamerDc) {
       msgObject.sender = ownerDisplayName
-      dataChannelSend(broadcastDc, msgObject, () => {
+      dataChannelSend(streamerDc, msgObject, () => {
         addChatMessage(text, selfDisplayName)
       })
       return
@@ -346,20 +339,6 @@ function App() {
         sender: sender ?? SYSTEM_LOG
       }]
       return msgs.slice(-maxHistoryMessage)
-    })
-  }
-
-  function initBroadcastDc(client: WHIPClient, peer: RTCPeerConnection) {
-    client.getResourceUrl().then(resUrl => {
-      const sid = resUrl.split('/').pop()
-      if (!sid) return
-      initDataChannel(sid, peer).then(dc => {
-        setBroadcastDc(dc)
-        dc.onopen = () => {
-          console.log(APP_LOG, 'broadcastDc open')
-          initSignalPeer(client, dc)
-        }
-      })
     })
   }
 
@@ -449,11 +428,7 @@ function App() {
         setWHIPClient(null)
         setStreamSession(null)
       }
-      addChatMessage('stream client closed')
-    }
-    if (signalPeer) {
-      signalPeer.close()
-      setSignalPeer(null)
+      addChatMessage('client closed')
     }
   }
 
@@ -477,17 +452,33 @@ function App() {
       },
       peerConnectionFactory: (config: RTCConfiguration) => {
         const peer = new RTCPeerConnection(config)
+        const signalPeer = new SignalPeer()
         peer.addEventListener('connectionstatechange', () => {
-          if (peer.connectionState != 'connected')
-            return
-          initBroadcastDc(client, peer)
-          setVideoBitrate(peer, videoTrack)
-          addChatMessage('stream client connected')
+          if (peer.connectionState == 'connected') {
+            client.getResourceUrl().then(resUrl => {
+              const sid = extractSessionIdFromUrl(resUrl)
+              initDataChannel(sid!, peer).then(dc => {
+                dc.onclose = () => {
+                  console.log(DC_LOG, 'close')
+                }
+                dc.onopen = () => {
+                  console.log(DC_LOG, 'open')
+                  initSignalPeer(signalPeer, sid!, dc)
+                  signalPeer.start()
+                }
+                setStreamerDc(dc)
+              })
+            })
+            setVideoBitrate(peer, videoTrack)
+            addChatMessage('client connected')
+          } else if (peer.connectionState == 'closed') {
+            signalPeer.close()
+          }
         })
         return peer
       }
     })
-    addChatMessage('stream client starting')
+    addChatMessage('client starting')
     await client.setIceServersFromEndpoint()
     await client.ingest(mediaStream)
     video.srcObject = mediaStream

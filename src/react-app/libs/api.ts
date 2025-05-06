@@ -105,6 +105,10 @@ export async function initDataChannel(
     location: remoteSid ? 'remote' : 'local',
     dataChannelName: label ?? BROADCAST_LABEL,
   }])
+  if (!dcRes.dataChannels.length) {
+    // never open dc
+    return new RTCDataChannel()
+  }
   const dc = peer.createDataChannel(label ?? BROADCAST_LABEL, {
     negotiated: true,
     id: dcRes.dataChannels[0].id

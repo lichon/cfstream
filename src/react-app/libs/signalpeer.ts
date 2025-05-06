@@ -34,8 +34,8 @@ export interface SignalMessage {
 
 export class SignalPeer {
   private config: RTCConfiguration;
-  private bootstrapPeer: RTCPeerConnection;
-  private signalPeer: RTCPeerConnection;
+  private bootstrapPeer: RTCPeerConnection | null = null;
+  private signalPeer: RTCPeerConnection | null = null;
   private signalDcMap: Map<string, RTCDataChannel> = new Map<string, RTCDataChannel>();
   private onMessageCallback: MessageCallback | null = null;
   private onOpenCallback: StatusCallback | null = null;
@@ -44,15 +44,11 @@ export class SignalPeer {
   private onBootstrapKickedCallback: NotifyCallback | null = null;
 
   private bootstrapSid: string | undefined;
-  private bootstrapConnected: boolean = false;
   private signalSid: string | undefined;
-  private signalConnected: boolean = false;
   private closed: boolean = false;
 
   constructor(config: RTCConfiguration = { iceServers: STUN_SERVERS }) {
     this.config = config;
-    this.bootstrapPeer = new RTCPeerConnection(config);
-    this.signalPeer = new RTCPeerConnection(config);
   }
 
   static label = SIGNAL_LABEL
@@ -120,38 +116,50 @@ export class SignalPeer {
     return this.bootstrapSid
   }
 
+  // create new signal dc subs to remote session
   async newSignalDc(remoteSid: string) {
-    console.log(DC_TAG, `adding new signalDc ${remoteSid}`)
-    if (this.signalDcMap.has(remoteSid) || !this.signalSid) {
+    if (!this.signalPeer || !this.signalSid) {
+      console.log(DC_TAG, 'signal peer not ready')
       return
     }
-    const signalDc = await requestDataChannel(this.signalSid,
+    if (this.signalDcMap.has(remoteSid)) {
+      console.log(DC_TAG, `${remoteSid} already added`)
+      return
+    }
+
+    console.log(DC_TAG, `request new signalDc for ${remoteSid}`)
+    const signalDc = await requestDataChannel(
+      this.signalSid,
       this.signalPeer,
       remoteSid,
       SignalPeer.label
     )
 
-    console.log(DC_TAG, `created signalDc ${remoteSid}`)
     if (this.signalDcMap.has(remoteSid)) {
       const oldDc = this.signalDcMap.get(remoteSid)
       oldDc?.close()
+      console.log(DC_TAG, `close old signalDc for ${remoteSid}`)
+    }
+    this.signalDcMap.set(remoteSid, signalDc)
+    if (!signalDc.id) {
+      // skip closed remote dc, but keep them in dc map
+      return
     }
 
-    this.signalDcMap.set(remoteSid, signalDc)
     signalDc.onclose = () => {
-      console.log(DC_TAG, 'close')
+      console.log(DC_TAG, remoteSid, 'close')
       if (this.onCloseCallback) {
         this.onCloseCallback(remoteSid)
       }
     }
     signalDc.onopen = () => {
-      console.log(DC_TAG, 'open')
+      console.log(DC_TAG, remoteSid, 'open')
       if (this.onOpenCallback) {
         this.onOpenCallback(remoteSid)
       }
     }
     signalDc.onmessage = (ev) => {
-      console.log(DC_TAG, `recv <<< ${ev.data}`)
+      console.log(DC_TAG, remoteSid, `recv <<< ${ev.data}`)
       if (this.onMessageCallback) {
         this.onMessageCallback(remoteSid, ev)
       }
@@ -159,63 +167,79 @@ export class SignalPeer {
   }
 
   private async startBootstrap() {
-    const peer = this.bootstrapPeer
-    peer.onconnectionstatechange = () => {
-      console.log(BOOT_TAG, `${this.bootstrapSid} ${peer.connectionState}`)
-
-      const lastConnected = this.bootstrapConnected
-      this.bootstrapConnected = peer.connectionState == 'connected'
-      const changed = lastConnected != this.bootstrapConnected
-
-      if (!changed) return
-
-      if (this.bootstrapConnected) {
-        if (this.onBootstrapCallback) this.onBootstrapCallback()
-      } else {
-        this.bootstrapSid = undefined
-        if (this.onBootstrapKickedCallback) this.onBootstrapKickedCallback()
-        // restart
-        peer.close()
-        this.bootstrapPeer = new RTCPeerConnection(this.config)
-        setTimeout(() => this.startBootstrap(), broadcastInterval)
-      }
-    }
-
-    const offer = await peer.createOffer()
-    await peer.setLocalDescription(offer)
-    const res = await createSession(offer.sdp)
-    if (!res?.sessionDescription) {
-      throw new Error('failed to create session')
-    }
-    this.bootstrapSid = res?.sessionId
-    await peer.setRemoteDescription(res?.sessionDescription.toJSON())
-  }
-
-  private async startSignal() {
-    const peer = this.signalPeer
+    let lastConnected = false
+    const peer = new RTCPeerConnection(this.config)
     const connected = new Promise((resolve, reject) => {
       peer.onconnectionstatechange = () => {
-        console.log(SIGNAL_TAG, `${this.signalSid} ${peer.connectionState}`)
+        console.log(BOOT_TAG, `${this.bootstrapSid} ${peer.connectionState}`)
 
-        const lastConnected = this.signalConnected
-        this.signalConnected = peer.connectionState == 'connected'
-        const failed = peer.connectionState == 'failed'
-        const changed = lastConnected != this.signalConnected
+        const peerConnected = peer.connectionState == 'connected'
+        const changed = lastConnected != peerConnected
+        lastConnected = peerConnected
 
-        if (failed) {
+        if (peer.connectionState == 'failed') {
           reject()
           return
         }
         if (!changed)
           return
 
-        // TODO fix signal connected state
-        if (this.signalConnected) {
+        if (peerConnected) {
           resolve(undefined)
+          if (this.onBootstrapCallback) this.onBootstrapCallback()
         } else {
+          this.bootstrapSid = undefined
+          this.bootstrapPeer = null
           // restart
           peer.close()
-          this.signalPeer = new RTCPeerConnection(this.config)
+          setTimeout(() => this.startBootstrap(), broadcastInterval)
+          // callback
+          if (this.onBootstrapKickedCallback) this.onBootstrapKickedCallback()
+        }
+      }
+    })
+
+    const offer = await peer.createOffer()
+    await peer.setLocalDescription(offer)
+    const res = await createSession(offer.sdp)
+    if (!res?.sessionDescription) {
+      peer.close()
+      throw new Error('failed to create session')
+    }
+    this.bootstrapSid = res?.sessionId
+    await peer.setRemoteDescription(res?.sessionDescription.toJSON())
+    await connected
+    this.bootstrapPeer = peer
+    if (this.closed)
+      peer.close()
+  }
+
+  private async startSignal() {
+    let lastConnected = false
+    const peer = new RTCPeerConnection(this.config)
+    const connected = new Promise((resolve, reject) => {
+      peer.onconnectionstatechange = () => {
+        console.log(SIGNAL_TAG, `${this.signalSid} ${peer.connectionState}`)
+
+        const failed = peer.connectionState == 'failed'
+        const peerConnected = peer.connectionState == 'connected'
+        const changed = lastConnected != peerConnected
+        lastConnected = peerConnected
+
+        if (peer.connectionState == 'failed') {
+          reject()
+          return
+        }
+        if (!changed)
+          return
+
+        if (peerConnected) {
+          resolve(undefined)
+        } else if (failed) {
+          this.signalDcMap.forEach(dc => dc.close())
+          this.signalDcMap.clear()
+          // restart
+          peer.close()
           setTimeout(() => this.startSignal())
         }
       }
@@ -225,11 +249,15 @@ export class SignalPeer {
     await peer.setLocalDescription(offer)
     const res = await createSession(offer.sdp)
     if (!res?.sessionDescription) {
+      peer.close()
       throw new Error('failed to create session')
     }
     this.signalSid = res?.sessionId
     await peer.setRemoteDescription(res?.sessionDescription.toJSON())
     await connected
+    this.signalPeer = peer
+    if (this.closed)
+      peer.close()
   }
 
   onBootstrapReady(callback: NotifyCallback): void {
@@ -252,6 +280,7 @@ export class SignalPeer {
     this.onCloseCallback = callback;
   }
 
+  // activeSid would expire in server side
   clearInvalidDc(activeSids: string[]) {
     const activeSet = new Set<string>(activeSids)
     const keysToDel: string[] = []
@@ -273,7 +302,13 @@ export class SignalPeer {
     this.signalDcMap.forEach(dc => dc.close())
     this.signalDcMap.clear()
     // close peers
-    this.bootstrapPeer.close()
-    this.signalPeer.close()
+    if (this.bootstrapPeer) {
+      this.bootstrapPeer.close()
+      this.bootstrapPeer = null
+    }
+    if (this.signalPeer) {
+      this.signalPeer.close()
+      this.signalPeer = null
+    }
   }
 }
