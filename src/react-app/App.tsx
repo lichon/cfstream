@@ -44,7 +44,7 @@ const ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
 const isDebug = getConfig().debug
 
 function getVideoElement() {
-  return window.document.querySelector<HTMLVideoElement>('#video')
+  return window.document.querySelector<HTMLVideoElement>('#video')!
 }
 
 function App() {
@@ -290,13 +290,15 @@ function App() {
           break
         case '/m':
         case '/mute':
-          v.muted = true
-          addChatMessage(`video muted`)
+          v.muted = !v.muted
+          addChatMessage(`video muted ${v.muted}`)
           break
-        case '/u':
-        case '/unmute':
-          v.muted = false
-          addChatMessage(`video unmuted`)
+        case '/f':
+        case '/fullscreen':
+          v.requestFullscreen()
+          break
+        case '/pip':
+          v.requestPictureInPicture()
           break
         case '/vu':
         case '/volumeUp':
@@ -570,24 +572,28 @@ function App() {
       </div>
 
       <div className='video-wrapper'>
-        <video id='video' autoPlay muted
+        <video id='video' autoPlay muted playsInline
           // Add reference for Safari PiP API
           ref={(video) => {
-            if (video && isMoblie) {
+            if (video) {
+              let playTriggered = Date.now()
               video.disablePictureInPicture = false
               video.playsInline = true
-            }
-          }}
-          onClick={(ev) => {
-            setLogVisible(false)
-            if (!isMoblie) return
-            const video = ev.target as HTMLVideoElement
-            if (video.paused) {
-              video.requestPictureInPicture()
-              video.play()
-              video.muted = false
-            } else {
-              video.pause()
+              video.onplay = () => {
+                playTriggered = Date.now()
+                video.controls = false
+              }
+              video.onclick = () => {
+                setLogVisible(false)
+                if (!isMoblie) return
+                if (video.paused) {
+                  video.controls = false
+                  video.play()
+                } else if (Date.now() - playTriggered > 100) {
+                  video.controls = true
+                  video.pause()
+                }
+              }
             }
           }}
           onDoubleClick={(ev) => {

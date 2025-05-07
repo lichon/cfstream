@@ -47,7 +47,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend
             position: 'fixed',
             bottom: '0',
             width: '100%',
-            maxHeight: '50%',
+            maxHeight: '40%',
             backgroundColor: 'rgba(0, 0, 0, 0.8)',
             color: 'white',
             padding: '10px',
