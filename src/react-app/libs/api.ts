@@ -110,7 +110,7 @@ export async function getSessionByName(name: string): Promise<string> {
   return res.text()
 }
 
-export async function initDataChannel(
+export async function requestDataChannel(
   sid: string,
   peer: RTCPeerConnection,
   remoteSid?: string | null,

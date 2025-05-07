@@ -2,7 +2,7 @@ import { getConfig } from '../config'
 import {
   kickSignalSession,
   createSession,
-  initDataChannel as requestDataChannel,
+  requestDataChannel,
 } from './api'
 
 const broadcastInterval = getConfig().stream.broadcastInterval
@@ -12,6 +12,31 @@ const SIGNAL_TAG = 'SignalPeer';
 const DC_TAG = 'SignalDc';
 
 const OriginalRTCPeerConnection = window.RTCPeerConnection;
+(() => {
+  // Create a new constructor function that wraps the original
+  const patchedConstructor: typeof RTCPeerConnection = function (
+    this: RTCPeerConnection,
+    configuration?: RTCConfiguration
+  ) {
+    const peer = new OriginalRTCPeerConnection(configuration)
+    const bootstrapDc = peer.createDataChannel('bootstrap')
+    Object.defineProperty(peer, 'bootstrapDc', {
+      enumerable: true,
+      configurable: false,
+      get: () => bootstrapDc,
+      set: (_v) => { throw new Error('cannot set bootstrap dc') }
+    })
+    return peer
+  } as never
+
+  // Copy over the prototype and static methods
+  patchedConstructor.prototype = OriginalRTCPeerConnection.prototype
+  patchedConstructor.generateCertificate = OriginalRTCPeerConnection.generateCertificate
+
+  // Replace the global RTCPeerConnection
+  window.RTCPeerConnection = patchedConstructor;
+  console.log('peerconnection patched')
+})()
 
 type MessageCallback = (sid: string, message: MessageEvent) => void;
 type StatusCallback = (sid: string) => void;
@@ -52,31 +77,6 @@ export class SignalPeer {
 
   static label = SIGNAL_LABEL
 
-  static patchPeerConnection() {
-    // Create a new constructor function that wraps the original
-    const patchedConstructor: typeof RTCPeerConnection = function (
-      this: RTCPeerConnection,
-      configuration?: RTCConfiguration
-    ) {
-      const peer = new OriginalRTCPeerConnection(configuration)
-      const bootstrapDc = peer.createDataChannel('bootstrap')
-      Object.defineProperty(peer, 'bootstrapDc', {
-        enumerable: true,
-        configurable: false,
-        get: () => bootstrapDc,
-        set: (_v) => { throw new Error('cannot set bootstrap dc') }
-      })
-      return peer
-    } as never
-
-    // Copy over the prototype and static methods
-    patchedConstructor.prototype = OriginalRTCPeerConnection.prototype
-    patchedConstructor.generateCertificate = OriginalRTCPeerConnection.generateCertificate
-
-    // Replace the global RTCPeerConnection
-    window.RTCPeerConnection = patchedConstructor;
-  }
-
   static newSignalEvent(status: string, sid: string): SignalMessage {
     return {
       type: 'signal',
@@ -95,7 +95,7 @@ export class SignalPeer {
     }
   }
 
-  static async kick(session: string): Promise<boolean> {
+  static async kickSignal(session: string): Promise<boolean> {
     const tmpPeer = new RTCPeerConnection()
     try {
       const sdp = (await tmpPeer.createOffer()).sdp
@@ -122,7 +122,6 @@ export class SignalPeer {
       return
     }
     if (this.signalDcMap.has(remoteSid)) {
-      console.log(DC_TAG, `${remoteSid} already added`)
       return
     }
 
@@ -284,9 +283,8 @@ export class SignalPeer {
     const activeSet = new Set<string>(activeSids)
     const keysToDel: string[] = []
     this.signalDcMap.forEach((v, k) => {
-      if (activeSet.has(k)) return
-      keysToDel.push(k)
-      v.close()
+      if (v.readyState == 'closed' && !activeSet.has(k))
+        keysToDel.push(k)
     })
     keysToDel.forEach(k => {
       this.signalDcMap.delete(k)

@@ -13,7 +13,7 @@ import { ChatMessage, ChatOverlay } from './components/chat-overlay'
 import { SignalPeer, SignalMessage, SignalEvent } from './libs/signalpeer'
 import { ChromeTTS } from './libs/tts'
 import {
-  initDataChannel,
+  requestDataChannel,
   getSessionInfo,
   getSessionUrl,
   getPlayerUrl,
@@ -67,7 +67,6 @@ function App() {
   useEffect(() => {
     if (!_firstLoad) return
     _firstLoad = false
-    SignalPeer.patchPeerConnection()
     help()
     play()
 
@@ -148,7 +147,7 @@ function App() {
         const signalEvent = event.content as SignalEvent
         if (signalEvent.status == 'waiting') {
           if (signalConnected || now - lastKick < 60000) return
-          if (await SignalPeer.kick(signalEvent.sid)) {
+          if (await SignalPeer.kickSignal(signalEvent.sid)) {
             console.log(APP_LOG, `${signalEvent.sid} kicked`)
             lastKick = now
           }
@@ -174,14 +173,14 @@ function App() {
       function initPlayerSignal() {
         const playerSid = getPlayerSession()
         // signal publisher
-        initDataChannel(playerSid, peer, null, SignalPeer.label).then(dc => {
+        requestDataChannel(playerSid, peer, null, SignalPeer.label).then(dc => {
           dc.onopen = () => {
             console.log(APP_LOG, 'publisher dc open')
           }
           setPlayerDc(dc)
         })
         // signal subscriber
-        initDataChannel(playerSid, peer, sidParam).then(dc => {
+        requestDataChannel(playerSid, peer, sidParam).then(dc => {
           dc.onopen = () => {
             console.log(APP_LOG, 'subscriber dc open')
           }
@@ -247,7 +246,7 @@ function App() {
       // bootstrap kicked, connect signal to new sub
       getSessionInfo(sessionId).then(info => {
         info.subs.forEach(sid => signalPeer.newSignalDc(sid))
-        // signalPeer.clearInvalidDc(info.subs)
+        signalPeer.clearInvalidDc(info.subs)
       })
     })
     signalPeer.onOpen((sid: string) => {
@@ -479,7 +478,7 @@ function App() {
           if (peer.connectionState == 'connected') {
             client.getResourceUrl().then(resUrl => {
               const sid = extractSessionIdFromUrl(resUrl)
-              initDataChannel(sid!, peer).then(dc => {
+              requestDataChannel(sid!, peer).then(dc => {
                 dc.onclose = () => {
                   console.log(DC_LOG, 'client dc close')
                 }
