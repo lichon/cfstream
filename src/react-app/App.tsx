@@ -585,6 +585,7 @@ function App() {
             if (video.paused) {
               video.requestPictureInPicture()
               video.play()
+              video.muted = false
             } else {
               video.pause()
             }
