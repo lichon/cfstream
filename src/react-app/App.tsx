@@ -41,7 +41,7 @@ const isMoblie = getConfig().ui.isMobilePlatform
 const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
 const ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
-const isDebug = getConfig().debug
+let isDebug = getConfig().debug
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')!
@@ -275,6 +275,10 @@ function App() {
       switch (text) {
         case '/?':
           addChatMessage(`TODO add help tips`)
+          break
+        case '/debug':
+          isDebug = !isDebug
+          addChatMessage(`debug enabled ${isDebug}`)
           break
         case '/c':
         case '/clear':
