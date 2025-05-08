@@ -10,7 +10,7 @@ import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
-import { SignalPeer, SignalMessage, SignalEvent } from './libs/signalpeer'
+import { SignalPeer, SignalMessage, SignalEvent, patchRTCPeerConnection } from './libs/signalpeer'
 import { ChromeTTS } from './libs/tts'
 import {
   requestDataChannel,
@@ -48,6 +48,7 @@ function getVideoElement() {
 }
 
 function App() {
+  let wakeLock: WakeLockSentinel | null = null
   const ttsPlayer = new ChromeTTS()
   const signalPeer = new SignalPeer()
   const [streamSession, setStreamSession] = useState<string>()
@@ -67,6 +68,7 @@ function App() {
   useEffect(() => {
     if (!_firstLoad) return
     _firstLoad = false
+    patchRTCPeerConnection()
     help()
     play()
 
@@ -91,12 +93,42 @@ function App() {
     addChatMessage('type /? for help')
   }
 
+  async function requestWakeLock() {
+    if (wakeLock) return
+    if ('wakeLock' in navigator) {
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        console.log(APP_LOG, 'Wake lock acquired');
+
+        // 监听释放事件（如页面隐藏）
+        document.addEventListener('visibilitychange', async () => {
+          if (wakeLock !== null && !document.hidden) {
+            wakeLock = await navigator.wakeLock.request('screen')
+          }
+        });
+      } catch (err) {
+        console.error(APP_LOG, 'Failed to acquire wake lock:', err);
+      }
+    } else {
+      console.warn(APP_LOG, 'Wake Lock API not supported');
+    }
+  }
+
+  async function releaseWakeLock() {
+    if (wakeLock) {
+      await wakeLock.release()
+      wakeLock = null
+      console.log(APP_LOG, 'Wake lock released')
+    }
+  }
+
   function stop() {
     if (whepPlayer) {
       whepPlayer.destroy()
       setWHEPPlayer(undefined)
       setStreamSession(undefined)
       setPlayerDc(undefined)
+      addChatMessage('closed')
     }
   }
 
@@ -115,6 +147,7 @@ function App() {
       return
     }
 
+    requestWakeLock()
     const player = new WebRTCPlayer({
       debug: false,
       video: video,
@@ -278,6 +311,8 @@ function App() {
           break
         case '/debug':
           isDebug = !isDebug
+          if (isDebug)
+            setLogVisible(true)
           addChatMessage(`debug enabled ${isDebug}`)
           break
         case '/c':
@@ -462,6 +497,7 @@ function App() {
   }
 
   async function startStream(shareScreen?: boolean) {
+    requestWakeLock()
     setShowHoverMenu(false)
     const video = getVideoElement()
 
@@ -522,11 +558,12 @@ function App() {
           <button className='control-bt'
             onClick={() => {
               if (streamSession) {
+                releaseWakeLock()
                 stopStream()
                 stop()
               } else {
                 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-                sidParam ? play() : setShowHoverMenu(!showHoverMenu)
+                sidParam || nameParam ? play() : setShowHoverMenu(true)
               }
             }}
           >

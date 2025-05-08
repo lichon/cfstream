@@ -12,7 +12,7 @@ const SIGNAL_TAG = 'SignalPeer';
 const DC_TAG = 'SignalDc';
 
 const OriginalRTCPeerConnection = window.RTCPeerConnection;
-(() => {
+export const patchRTCPeerConnection = () => {
   // Create a new constructor function that wraps the original
   const patchedConstructor: typeof RTCPeerConnection = function (
     this: RTCPeerConnection,
@@ -36,7 +36,7 @@ const OriginalRTCPeerConnection = window.RTCPeerConnection;
   // Replace the global RTCPeerConnection
   window.RTCPeerConnection = patchedConstructor;
   console.log('peerconnection patched')
-})()
+}
 
 type MessageCallback = (sid: string, message: MessageEvent) => void;
 type StatusCallback = (sid: string) => void;
