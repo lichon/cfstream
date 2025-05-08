@@ -255,6 +255,7 @@ app.post('/api/sessions/:sid', async (c) => {
     body: JSON.stringify(request)
   })
   const joinRes = await res.json() as TracksResponse
+  console.log(`new play session ${sid}`)
 
   // save new sub to session
   await putSessionSubs(c.env.KVASA, whipSid, sid)

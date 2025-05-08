@@ -64,8 +64,8 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend
                 key={index}
                 style={{
                   marginBottom: '8px',
-                  fontSize: '14px',
-                  fontFamily: 'sans-serif',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   textAlign: 'left',
@@ -86,6 +86,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
+              onBlur={() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })}
               style={{
                 flex: 1,
                 padding: '8px',
