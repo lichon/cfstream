@@ -45,7 +45,7 @@ const defaultConfig: AppConfig = {
   },
   stream: {
     broadcastInterval: 5000,
-    jitterBufferTarget: Number(import.meta.env.VITE_JITTER_BUFFER_TARGET) || 1500,
+    jitterBufferTarget: Number(import.meta.env.VITE_JITTER_BUFFER_TARGET) || 500,
     videoBitrate: Number(import.meta.env.VITE_VIDEO_BITRATE) || 1000000,
     broadcastLabel: 'broadcast',
     signalLabel: 'signal',
