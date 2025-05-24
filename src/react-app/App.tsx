@@ -64,6 +64,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isScreenShare, setScreenShare] = useState(true);
+  const [ttsMediaStream, setTTSMediaStream] = useState<MediaStream | undefined>(undefined);
 
   useEffect(() => {
     if (!_firstLoad) return
@@ -88,6 +89,63 @@ function App() {
     window.addEventListener('keydown', handleKeyDown)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
+
+  useEffect(() => {
+    if (!import.meta.hot) return
+    const handler = (data: string) => {
+      if (!data?.length || !ttsMediaStream) return
+      ttsPlayer.speak(data, {
+        rate: 3.0,
+        sinkId: 'communications',
+        mediaStream: ttsMediaStream
+      })
+    }
+    import.meta.hot.on('custom:tts', handler)
+    return () => {
+      import.meta.hot?.off('custom:tts', handler)
+    }
+  }, [ttsMediaStream, ttsPlayer])
+
+  async function ttsInput() {
+    // eslint-disable-next-line
+    const pipWindow = await (window as any).documentPictureInPicture?.requestWindow()
+    if (!pipWindow) return
+
+    const mediaStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
+    pipWindow.addEventListener('pagehide', () => {
+      mediaStream.getTracks().forEach(track => track.stop())
+      setTTSMediaStream(undefined)
+    })
+    setTTSMediaStream(mediaStream)
+
+    const tmpInput = document.createElement('input')
+    // Set attributes for the input element (optional)
+    tmpInput.setAttribute('type', 'text')
+
+    // Set styles for the input element
+    tmpInput.style.width = '100%'
+    tmpInput.style.fontSize = '24px'
+    tmpInput.style.border = '0px'
+    tmpInput.style.outline = 'none'
+
+    tmpInput.addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        const message = tmpInput.value.trim()
+        if (!message) return
+
+        tmpInput.value = ''
+        tmpInput.focus()
+        ttsPlayer.speak(message, {
+          rate: 3.0,
+          sinkId: 'communications',
+          mediaStream: mediaStream
+        })
+      }
+    })
+    // Move the player to the Picture-in-Picture window.
+    pipWindow.document.body.append(tmpInput)
+  }
 
   function help() {
     addChatMessage('type /? for help')
@@ -338,6 +396,9 @@ function App() {
           break
         case '/pip':
           v.requestPictureInPicture()
+          break
+        case '/tts':
+          ttsInput()
           break
         case '/vu':
         case '/volumeUp':

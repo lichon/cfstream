@@ -3,7 +3,7 @@ import { exec } from 'child_process';
 
 export default [
   {
-    url: '/api/tts',
+    url: '/api/piper',
     method: 'get',
     response: (req) => {
       const txt = req.query.txt;
@@ -15,14 +15,14 @@ export default [
             resolve()
             return
           }
-          exec('mpv --audio-device=wasapi\/{a8b47dd6-3226-48db-9b72-862860a13f42} /Users/lc/tmp/tmp.wav', (error, stdout, stderr) => {
-            if (error) {
-              console.log('error', error, stdout, stderr)
-            }
-            resolve()
-          });
+          resolve()
         });
       });
     },
+  },
+  {
+    url: '/api/tts',
+    method: 'get',
+    response: 'ok'
   },
 ];

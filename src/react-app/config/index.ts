@@ -71,6 +71,7 @@ const defaultConfig: AppConfig = {
       '/f',
       '/fullscreen',
       '/pip',
+      '/tts',
       '/volumeUp',
       '/vu',
       '/volumeDown',
