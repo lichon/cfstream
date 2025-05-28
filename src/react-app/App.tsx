@@ -210,9 +210,9 @@ function App() {
     player.load(new URL(getSessionUrl(sidParam))).then(() => {
       const playerObj = player as never
       const playerAdapter = playerObj['adapter'] as never
-      const anyPeer = playerAdapter['localPeer'] as never
-      const bootstrapDc = anyPeer['bootstrapDc'] as RTCDataChannel
-      const peer = anyPeer as RTCPeerConnection
+      const localPeer = playerAdapter['localPeer'] as never
+      const bootstrapDc = localPeer['bootstrapDc'] as RTCDataChannel
+      const peer = localPeer as RTCPeerConnection
 
       let signalConnected = false
       let lastKick: number = 0
@@ -273,10 +273,10 @@ function App() {
         })
       }
 
-      function jitterBufferConfig() {
+      function jitterBufferConfig(target?: number) {
         // set all receiver with the same buffer
         peer.getReceivers().forEach(r => {
-          r.jitterBufferTarget = jitterBufferTarget
+          r.jitterBufferTarget = target ? target : jitterBufferTarget
         })
       }
 
@@ -355,6 +355,9 @@ function App() {
           if (isDebug)
             setLogVisible(true)
           addChatMessage(`debug enabled ${isDebug}`)
+          break
+        case '/buffer':
+          // TODO config player buffer
           break
         case '/c':
         case '/clear':
@@ -502,9 +505,9 @@ function App() {
       setScreenShare(true)
       ret = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 60 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 15 },
         },
         audio: true,
       })

@@ -60,6 +60,7 @@ const defaultConfig: AppConfig = {
     cmdList: new Set<string>([
       '/?',
       '/debug',
+      '/buffer',
       '/clear',
       '/c',
       '/hide',
