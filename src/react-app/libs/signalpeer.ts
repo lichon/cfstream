@@ -56,6 +56,11 @@ export interface SignalMessage {
   sender?: string;
 }
 
+export interface ChatMessage {
+  content: unknown;
+  sender?: string;
+}
+
 export class SignalPeer {
   private config: RTCConfiguration;
   private bootstrapPeer: RTCPeerConnection | null = null;

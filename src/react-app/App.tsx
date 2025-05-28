@@ -87,8 +87,7 @@ function App() {
       if (event.key === 'Enter') {
         setChatVisible(true)
       } else if (event.key === 'm') {
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-        getVideoElement().muted ? handleCmd('/unmute') : handleCmd('/mute')
+        handleCmd('/mute')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -340,7 +339,9 @@ function App() {
       }
       // TODO supoprt rpc
     })
-    signalPeer.start()
+    signalPeer.start().catch(() => {
+      addChatMessage('signal peer start error')
+    })
   }
 
   function handleCmd(text: string): boolean {
