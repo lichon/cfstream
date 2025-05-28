@@ -1,9 +1,10 @@
 // src/App.tsx
 
-import { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import './App.css'
 
 import { getConfig } from './config'
+import { useWakeLock } from './hooks/wake-lock'
 
 import { WHIPClient } from '@eyevinn/whip-web-client'
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
@@ -47,10 +48,12 @@ function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')!
 }
 
+patchRTCPeerConnection()
+
 function App() {
-  let wakeLock: WakeLockSentinel | null = null
-  const ttsPlayer = new ChromeTTS()
-  const signalPeer = new SignalPeer()
+  const signalPeer = useMemo(() => new SignalPeer(), [])
+  const ttsPlayer = useMemo(() => new ChromeTTS(), [])
+  const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock()
   const [streamSession, setStreamSession] = useState<string>()
   const [playerSession, setPlayerSession] = useState<string>()
   const [whipClient, setWHIPClient] = useState<WHIPClient>()
@@ -67,26 +70,31 @@ function App() {
   const [ttsMediaStream, setTTSMediaStream] = useState<MediaStream | undefined>(undefined);
 
   useEffect(() => {
-    if (!_firstLoad) return
-    _firstLoad = false
-    patchRTCPeerConnection()
-    help()
-    play()
+    if (_firstLoad) {
+      _firstLoad = false
+      help()
+      play()
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setChatVisible(false)
         setLogVisible(false)
         setQrVisible(false)
-      } else if (event.key === 'Enter') {
+        return
+      }
+      if (event.target !== document.body) return
+      if (event.key === 'Enter') {
         setChatVisible(true)
       } else if (event.key === 'm') {
-        const v = getVideoElement()
         // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-        v?.muted ? handleCmd('/unmute') : handleCmd('/mute')
+        getVideoElement().muted ? handleCmd('/unmute') : handleCmd('/mute')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
 
@@ -106,17 +114,21 @@ function App() {
     }
   }, [ttsMediaStream, ttsPlayer])
 
-  async function ttsInput() {
+  async function ttsInput(redirectSound = false) {
+    if (!ttsEnabled) return
     // eslint-disable-next-line
     const pipWindow = await (window as any).documentPictureInPicture?.requestWindow()
     if (!pipWindow) return
 
-    const mediaStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
-    pipWindow.addEventListener('pagehide', () => {
-      mediaStream.getTracks().forEach(track => track.stop())
-      setTTSMediaStream(undefined)
-    })
-    setTTSMediaStream(mediaStream)
+    let mediaStream: MediaStream | undefined = undefined
+    if (redirectSound) {
+      mediaStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
+      pipWindow.addEventListener('pagehide', () => {
+        mediaStream?.getTracks().forEach(track => track.stop())
+        setTTSMediaStream(undefined)
+      })
+      setTTSMediaStream(mediaStream)
+    }
 
     const tmpInput = document.createElement('input')
     // Set attributes for the input element (optional)
@@ -138,8 +150,8 @@ function App() {
         tmpInput.focus()
         ttsPlayer.speak(message, {
           rate: 3.0,
-          sinkId: 'communications',
-          mediaStream: mediaStream
+          sinkId: redirectSound ? 'communications' : undefined,
+          mediaStream: redirectSound ? mediaStream : undefined,
         })
       }
     })
@@ -149,35 +161,6 @@ function App() {
 
   function help() {
     addChatMessage('type /? for help')
-  }
-
-  async function requestWakeLock() {
-    if (wakeLock) return
-    if ('wakeLock' in navigator) {
-      try {
-        wakeLock = await navigator.wakeLock.request('screen');
-        console.log(APP_LOG, 'Wake lock acquired');
-
-        // 监听释放事件（如页面隐藏）
-        document.addEventListener('visibilitychange', async () => {
-          if (wakeLock !== null && !document.hidden) {
-            wakeLock = await navigator.wakeLock.request('screen')
-          }
-        });
-      } catch (err) {
-        console.error(APP_LOG, 'Failed to acquire wake lock:', err);
-      }
-    } else {
-      console.warn(APP_LOG, 'Wake Lock API not supported');
-    }
-  }
-
-  async function releaseWakeLock() {
-    if (wakeLock) {
-      await wakeLock.release()
-      wakeLock = null
-      console.log(APP_LOG, 'Wake lock released')
-    }
   }
 
   function stop() {
@@ -317,7 +300,7 @@ function App() {
     }
   }
 
-  function startSignalPeer(signalPeer: SignalPeer, sessionId: string, broadcastDc: RTCDataChannel) {
+  function startSignalPeer(sessionId: string, broadcastDc: RTCDataChannel) {
     let broadcastTimeout: NodeJS.Timeout
 
     signalPeer.onBootstrapReady(() => {
@@ -399,6 +382,9 @@ function App() {
           break
         case '/tts':
           ttsInput()
+          break
+        case '/rtts':
+          ttsInput(true)
           break
         case '/vu':
         case '/volumeUp':
@@ -560,7 +546,6 @@ function App() {
   async function startStream(shareScreen?: boolean) {
     requestWakeLock()
     setShowHoverMenu(false)
-    const video = getVideoElement()
 
     addChatMessage('getting media from user')
     const mediaStream = await getMediaStream(shareScreen)
@@ -587,7 +572,7 @@ function App() {
                 }
                 dc.onopen = () => {
                   console.log(DC_LOG, 'client dc open')
-                  startSignalPeer(signalPeer, sid!, dc)
+                  startSignalPeer(sid!, dc)
                 }
                 setStreamerDc(dc)
               })
@@ -603,10 +588,10 @@ function App() {
     addChatMessage('client starting')
     await client.setIceServersFromEndpoint()
     await client.ingest(mediaStream)
-    video!.srcObject = mediaStream
     const resourceUrl = await client.getResourceUrl()
     setStreamSession(extractSessionIdFromUrl(resourceUrl))
     setWHIPClient(client)
+    getVideoElement().srcObject = mediaStream
   }
 
   return (
