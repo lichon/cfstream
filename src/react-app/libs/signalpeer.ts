@@ -5,6 +5,7 @@ import {
   requestDataChannel,
 } from './api'
 
+let debug = getConfig().debug
 const broadcastInterval = getConfig().stream.broadcastInterval
 const SIGNAL_LABEL = getConfig().stream.signalLabel;
 const STUN_SERVERS = getConfig().api.stunServers;
@@ -111,6 +112,18 @@ export class SignalPeer {
     }
   }
 
+  static enableDebug(enable: boolean) {
+    debug = enable
+  }
+
+  static send(dc: RTCDataChannel, msg: SignalMessage, callback?: () => void) {
+    if (dc.readyState == 'open') { const msgString = typeof msg === 'string' ? msg : JSON.stringify(msg)
+      dc.send(msgString)
+      if (debug) console.log(DC_TAG, `send >>>`, msgString)
+      if (callback) callback()
+    }
+  }
+
   async start() {
     await this.startSignal()
     await this.startBootstrap()
@@ -162,7 +175,7 @@ export class SignalPeer {
       }
     }
     signalDc.onmessage = (ev) => {
-      console.log(DC_TAG, remoteSid, `recv <<< ${ev.data}`)
+      if (debug) console.log(DC_TAG, remoteSid, `recv <<< ${ev.data}`)
       if (this.onMessageCallback) {
         this.onMessageCallback(remoteSid, ev)
       }

@@ -69,6 +69,49 @@ export class ChromeTTS {
     }
   }
 
+  public async pipInput(redirectSound = false): Promise<MediaStream | undefined> {
+    // eslint-disable-next-line
+    const pipWindow = await (window as any).documentPictureInPicture?.requestWindow()
+    if (!pipWindow) return
+
+    let mediaStream: MediaStream | undefined = undefined
+    if (redirectSound) {
+      mediaStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
+      pipWindow.addEventListener('pagehide', () => {
+        mediaStream?.getTracks().forEach(track => track.stop())
+      })
+    }
+
+    const tmpInput = document.createElement('input')
+    // Set attributes for the input element (optional)
+    tmpInput.setAttribute('type', 'text')
+
+    // Set styles for the input element
+    tmpInput.style.width = '100%'
+    tmpInput.style.fontSize = '24px'
+    tmpInput.style.border = '0px'
+    tmpInput.style.outline = 'none'
+
+    tmpInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        const txt = tmpInput.value.trim()
+        if (!txt) return
+
+        tmpInput.value = ''
+        tmpInput.focus()
+        this.speak(txt, {
+          rate: 2.0,
+          sinkId: redirectSound ? 'communications' : undefined,
+          mediaStream: redirectSound ? mediaStream : undefined,
+        })
+      }
+    })
+    // Move the player to the Picture-in-Picture window.
+    pipWindow.document.body.append(tmpInput)
+    return mediaStream
+  }
+
   public speak(text: string, options: TTSOptions = {}): void {
     this.stop();
     const utterance = new SpeechSynthesisUtterance(text);

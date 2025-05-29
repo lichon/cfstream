@@ -4,6 +4,7 @@ import { getSessionUrl, requestDataChannel, getSessionByName, extractSessionIdFr
   
 import { getConfig } from '../config'
 
+let debug = getConfig().debug
 const stunServers = getConfig().api.stunServers
 const defaultBufferTarget = getConfig().stream.jitterBufferTarget || 500
 const selfDisplayName = getConfig().ui.selfDisplayName
@@ -11,7 +12,6 @@ const selfDisplayName = getConfig().ui.selfDisplayName
 const PLAYER_LOG = 'Player'
 
 export interface PlayerConfig {
-  debug: boolean
   videoElement: HTMLVideoElement
   onChatMessage?: (event: SignalChatMessage) => void
   onClose?: () => void
@@ -28,6 +28,10 @@ export class WHEPPlayer {
 
   constructor(config: PlayerConfig) {
     this.config = config
+  }
+
+  static enableDebug(enabled: boolean) {
+    debug = enabled
   }
 
   private handleSignalEvent = async (event: SignalMessage, selfSid: string) => {
@@ -73,8 +77,8 @@ export class WHEPPlayer {
         console.log(PLAYER_LOG, 'subscriber dc open')
       }
       dc.onmessage = async (ev) => {
-        if (this.config.debug)
-          console.log('DataChannel', 'recv <<<', ev.data as string)
+        if (debug)
+          console.log('SignalDc', 'recv <<<', ev.data as string)
         const event = JSON.parse(ev.data) as SignalMessage
         if (event.type === 'signal') {
           this.handleSignalEvent(event, playerSid)
@@ -109,7 +113,7 @@ export class WHEPPlayer {
     if (!sidParam?.length) return
 
     const player = new WebRTCPlayer({
-      debug: this.config.debug,
+      debug: debug,
       video: videoElement,
       type: 'whep',
       statsTypeFilter: '^inbound-rtp',
@@ -137,10 +141,6 @@ export class WHEPPlayer {
     })
     this.playingStream = sidParam
     this.player = player
-  }
-
-  public enableDebug(debug: boolean) {
-    this.config.debug = debug
   }
 
   public getPlayerDc() {

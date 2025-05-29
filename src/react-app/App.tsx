@@ -10,7 +10,7 @@ import { WHIPClient } from '@eyevinn/whip-web-client'
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
-import { SignalPeer, SignalMessage, SignalChatMessage, patchRTCPeerConnection } from './libs/signalpeer'
+import { SignalPeer, SignalChatMessage, patchRTCPeerConnection } from './libs/signalpeer'
 import { ChromeTTS } from './libs/tts'
 import { WHEPPlayer } from './libs/player'
 import {
@@ -40,7 +40,7 @@ const isMoblie = getConfig().ui.isMobilePlatform
 const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
 const ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
-let isDebug = getConfig().debug
+let debugEnabled = getConfig().debug
 
 function getVideoElement() {
   return window.document.querySelector<HTMLVideoElement>('#video')!
@@ -109,51 +109,6 @@ function App() {
     }
   }, [ttsMediaStream, ttsPlayer])
 
-  async function ttsInput(redirectSound = false) {
-    if (!ttsEnabled) return
-    // eslint-disable-next-line
-    const pipWindow = await (window as any).documentPictureInPicture?.requestWindow()
-    if (!pipWindow) return
-
-    let mediaStream: MediaStream | undefined = undefined
-    if (redirectSound) {
-      mediaStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
-      pipWindow.addEventListener('pagehide', () => {
-        mediaStream?.getTracks().forEach(track => track.stop())
-        setTTSMediaStream(undefined)
-      })
-      setTTSMediaStream(mediaStream)
-    }
-
-    const tmpInput = document.createElement('input')
-    // Set attributes for the input element (optional)
-    tmpInput.setAttribute('type', 'text')
-
-    // Set styles for the input element
-    tmpInput.style.width = '100%'
-    tmpInput.style.fontSize = '24px'
-    tmpInput.style.border = '0px'
-    tmpInput.style.outline = 'none'
-
-    tmpInput.addEventListener('keypress', function (e) {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        const message = tmpInput.value.trim()
-        if (!message) return
-
-        tmpInput.value = ''
-        tmpInput.focus()
-        ttsPlayer.speak(message, {
-          rate: 2.0,
-          sinkId: redirectSound ? 'communications' : undefined,
-          mediaStream: redirectSound ? mediaStream : undefined,
-        })
-      }
-    })
-    // Move the player to the Picture-in-Picture window.
-    pipWindow.document.body.append(tmpInput)
-  }
-
   function help() {
     addChatMessage('type /? for help')
   }
@@ -169,7 +124,6 @@ function App() {
 
     requestWakeLock()
     const player = new WHEPPlayer({
-      debug: isDebug,
       videoElement: getVideoElement(),
       onChatMessage: (event: SignalChatMessage) => {
         addChatMessage(event.content, event.sender)
@@ -185,17 +139,6 @@ function App() {
     setWHEPPlayer(player)
   }
 
-  function dataChannelSend(dc: RTCDataChannel, msg: SignalMessage, callback?: () => void) {
-    if (dc.readyState == 'open') { const msgString = typeof msg === 'string' ? msg : JSON.stringify(msg)
-      dc.send(msgString)
-
-      if (isDebug)
-        console.log(DC_LOG, `send >>>`, msgString)
-
-      if (callback) callback()
-    }
-  }
-
   function startSignalPeer(sessionId: string, broadcastDc: RTCDataChannel) {
     let broadcastTimeout: NodeJS.Timeout
 
@@ -206,10 +149,10 @@ function App() {
       const signalEvent = SignalPeer.newSignalEvent('waiting', bootSid!)
       const callback = () => {
         broadcastTimeout = setTimeout(() => {
-          dataChannelSend(broadcastDc, signalEvent, callback)
+          SignalPeer.send(broadcastDc, signalEvent, callback)
         }, broadcastInterval)
       }
-      dataChannelSend(broadcastDc, signalEvent, callback)
+      SignalPeer.send(broadcastDc, signalEvent, callback)
     })
     signalPeer.onBootstrapKicked(() => {
       clearTimeout(broadcastTimeout)
@@ -221,18 +164,18 @@ function App() {
     })
     signalPeer.onOpen((sid: string) => {
       addChatMessage(`${sid} joined`)
-      dataChannelSend(broadcastDc, SignalPeer.newSignalEvent('connected', sid))
+      SignalPeer.send(broadcastDc, SignalPeer.newSignalEvent('connected', sid))
     })
     signalPeer.onClose((sid: string) => {
       addChatMessage(`${sid} left`)
-      dataChannelSend(broadcastDc, SignalPeer.newSignalEvent('disconnected', sid))
+      SignalPeer.send(broadcastDc, SignalPeer.newSignalEvent('disconnected', sid))
     })
     signalPeer.onMessage((sid: string, ev) => {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'chat') {
         addChatMessage(msg.content, sid)
         // broadcast to all subs
-        dataChannelSend(broadcastDc, ev.data)
+        SignalPeer.send(broadcastDc, ev.data)
       }
       // TODO supoprt rpc
     })
@@ -241,84 +184,82 @@ function App() {
     })
   }
 
-  function handleCmd(text: string): boolean {
-    if (chatCmdList.has(text)) {
-      const v = getVideoElement()!
-      switch (text) {
-        case '/?':
-          addChatMessage(`TODO add help tips`)
-          break
-        case '/debug':
-          isDebug = !isDebug
-          if (isDebug)
-            setLogVisible(true)
-          addChatMessage(`debug enabled ${isDebug}`)
-          break
-        case '/buffer':
-          // TODO config player buffer
-          break
-        case '/c':
-        case '/clear':
-          setChatMessages([])
-          break
-        case '/h':
-        case '/hide':
-          setChatVisible(false)
-          break
-        case '/l':
-        case '/log':
-          setLogVisible(true)
-          break
-        case '/m':
-        case '/mute':
-          v.muted = !v.muted
-          addChatMessage(`video muted ${v.muted}`)
-          break
-        case '/f':
-        case '/fullscreen':
-          v.requestFullscreen()
-          break
-        case '/pip':
-          v.requestPictureInPicture()
-          break
-        case '/tts':
-          ttsInput()
-          break
-        case '/rtts':
-          ttsInput(true)
-          break
-        case '/vu':
-        case '/volumeUp':
-          if (v.volume <= 0.9)
-            v.volume = v.volume + 0.1
-          addChatMessage(`video volume is ${v.volume * 100}`)
-          break
-        case '/vd':
-        case '/volumeDown':
-          if (v.volume >= 0.1)
-            v.volume = v.volume - 0.1
-          addChatMessage(`video volume is ${v.volume * 100}`)
-          break
-      }
-      return true
+  async function handleCmd(text: string) {
+    const v = getVideoElement()!
+    switch (text) {
+      case '/?':
+        addChatMessage(`TODO add help tips`)
+        break
+      case '/debug':
+        debugEnabled = !debugEnabled
+        setLogVisible(debugEnabled)
+        SignalPeer.enableDebug(debugEnabled)
+        WHEPPlayer.enableDebug(debugEnabled)
+        addChatMessage(`debug enabled ${debugEnabled}`)
+        break
+      case '/buffer':
+        // TODO config player buffer
+        break
+      case '/c':
+      case '/clear':
+        setChatMessages([])
+        break
+      case '/h':
+      case '/hide':
+        setChatVisible(false)
+        break
+      case '/l':
+      case '/log':
+        setLogVisible(true)
+        break
+      case '/m':
+      case '/mute':
+        v.muted = !v.muted
+        addChatMessage(`video muted ${v.muted}`)
+        break
+      case '/f':
+      case '/fullscreen':
+        v.requestFullscreen()
+        break
+      case '/pip':
+        v.requestPictureInPicture()
+        break
+      case '/tts':
+        if (ttsEnabled) ttsPlayer.pipInput()
+        break
+      case '/rtts':
+        if (ttsEnabled) setTTSMediaStream(await ttsPlayer.pipInput(true))
+        break
+      case '/vu':
+      case '/volumeUp':
+        if (v.volume <= 0.9)
+          v.volume = v.volume + 0.1
+        addChatMessage(`video volume is ${v.volume * 100}`)
+        break
+      case '/vd':
+      case '/volumeDown':
+        if (v.volume >= 0.1)
+          v.volume = v.volume - 0.1
+        addChatMessage(`video volume is ${v.volume * 100}`)
+        break
     }
-    return false
   }
 
   function sendChatMessage(text: string) {
-    if (handleCmd(text)) {
+    if (chatCmdList.has(text)) {
+      handleCmd(text)
       return
     }
     const msgObject = SignalPeer.newChatMsg(text)
     const playerDc = whepPlayer?.getPlayerDc()
     if (playerDc) {
       msgObject.sender = whepPlayer?.getPlayerSid()
-      dataChannelSend(playerDc, msgObject)
+      SignalPeer.send(playerDc, msgObject)
       return
     }
     if (streamerDc) {
       msgObject.sender = ownerDisplayName
-      dataChannelSend(streamerDc, msgObject, () => {
+      SignalPeer.send(streamerDc, msgObject, () => {
         addChatMessage(text, selfDisplayName)
       })
       return
@@ -457,7 +398,7 @@ function App() {
     const client = new WHIPClient({
       endpoint: getSessionUrl(),
       opts: {
-        debug: false,
+        debug: debugEnabled,
         noTrickleIce: true,
         iceServers: stunServers,
       },
