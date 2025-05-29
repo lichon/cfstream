@@ -47,8 +47,8 @@ function App() {
   const [chatVisible, setChatVisible] = useState(true)
   const [showHoverMenu, setShowHoverMenu] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [isFrontCamera, setIsFrontCamera] = useState(true);
-  const [isScreenShare, setScreenShare] = useState(true);
+  const [isFrontCamera, setIsFrontCamera] = useState(false)
+  const [isScreenShare, setScreenShare] = useState(false)
 
   useEffect(() => {
     if (_firstLoad) {
@@ -252,6 +252,7 @@ function App() {
 
   async function startStream(shareScreen?: boolean) {
     setShowHoverMenu(false)
+    setScreenShare(shareScreen ?? false)
 
     addChatMessage('getting media from user')
     const mediaStream = await WHIPStreamer.getMediaStream(shareScreen)
