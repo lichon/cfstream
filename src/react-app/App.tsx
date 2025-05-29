@@ -7,24 +7,23 @@ import { getConfig } from './config'
 import { useWakeLock } from './hooks/wake-lock'
 
 import { WHIPClient } from '@eyevinn/whip-web-client'
-import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
-import { SignalPeer, SignalMessage, SignalEvent, patchRTCPeerConnection } from './libs/signalpeer'
+import { SignalPeer, SignalMessage, SignalChatMessage, patchRTCPeerConnection } from './libs/signalpeer'
 import { ChromeTTS } from './libs/tts'
+import { WHEPPlayer } from './libs/player'
 import {
   requestDataChannel,
   getSessionInfo,
   getSessionUrl,
   getPlayerUrl,
   extractSessionIdFromUrl,
-  getSessionByName,
   setSessionByName,
 } from './libs/api'
 
 let _firstLoad = true
-let sidParam = new URLSearchParams(window.location.search).get('sid') || undefined
+const sidParam = new URLSearchParams(window.location.search).get('sid') || undefined
 const nameParam = new URLSearchParams(window.location.search).get('name') || undefined
 const roomParam = new URLSearchParams(window.location.search).get('room') || undefined
 const SYSTEM_LOG = 'System'
@@ -33,7 +32,6 @@ const DC_LOG = 'DataChannel'
 
 const chatCmdList = getConfig().ui.cmdList
 const broadcastInterval = getConfig().stream.broadcastInterval
-const jitterBufferTarget = getConfig().stream.jitterBufferTarget
 const videoMaxBitrate = getConfig().stream.videoBitrate
 const maxHistoryMessage = getConfig().ui.maxHistoryMessage
 const openLinkOnShare = getConfig().ui.openLinkOnShare
@@ -55,14 +53,12 @@ function App() {
   const ttsPlayer = useMemo(() => new ChromeTTS(), [])
   const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock()
   const [streamSession, setStreamSession] = useState<string>()
-  const [playerSession, setPlayerSession] = useState<string>()
   const [whipClient, setWHIPClient] = useState<WHIPClient>()
-  const [whepPlayer, setWHEPPlayer] = useState<WebRTCPlayer>()
+  const [whepPlayer, setWHEPPlayer] = useState<WHEPPlayer>()
   const [qrVisible, setQrVisible] = useState(false)
   const [logVisible, setLogVisible] = useState(false)
   const [chatVisible, setChatVisible] = useState(true)
   const [showHoverMenu, setShowHoverMenu] = useState(false)
-  const [playerDc, setPlayerDc] = useState<RTCDataChannel>()
   const [streamerDc, setStreamerDc] = useState<RTCDataChannel>()
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(true);
@@ -73,7 +69,7 @@ function App() {
     if (_firstLoad) {
       _firstLoad = false
       help()
-      play()
+      startPlayer()
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -100,11 +96,11 @@ function App() {
   useEffect(() => {
     if (!import.meta.hot) return
     const handler = (data: string) => {
-      if (!data?.length || !ttsMediaStream) return
+      if (!data?.length) return
       ttsPlayer.speak(data, {
-        rate: 3.0,
-        sinkId: 'communications',
-        mediaStream: ttsMediaStream
+        rate: 2.0,
+        sinkId: ttsMediaStream ? 'communications' : undefined,
+        mediaStream: ttsMediaStream || undefined,
       })
     }
     import.meta.hot.on('custom:tts', handler)
@@ -148,7 +144,7 @@ function App() {
         tmpInput.value = ''
         tmpInput.focus()
         ttsPlayer.speak(message, {
-          rate: 3.0,
+          rate: 2.0,
           sinkId: redirectSound ? 'communications' : undefined,
           mediaStream: redirectSound ? mediaStream : undefined,
         })
@@ -162,130 +158,31 @@ function App() {
     addChatMessage('type /? for help')
   }
 
-  function stop() {
-    if (whepPlayer) {
-      whepPlayer.destroy()
-      setWHEPPlayer(undefined)
-      setStreamSession(undefined)
-      setPlayerDc(undefined)
-      addChatMessage('closed')
-    }
+  function stopPlayer() {
+    whepPlayer?.destroy()
+    setWHEPPlayer(undefined)
   }
 
-  async function play() {
-    const video = getVideoElement()
-    if (whepPlayer || !video)
+  async function startPlayer() {
+    if (whepPlayer)
       return
-
-    if (nameParam?.length) {
-      sidParam = await getSessionByName(nameParam)
-      if (!sidParam?.length)
-        addChatMessage('session not found')
-    }
-
-    if (!sidParam?.length) {
-      return
-    }
 
     requestWakeLock()
-    const player = new WebRTCPlayer({
-      debug: false,
-      video: video,
-      type: 'whep',
-      statsTypeFilter: '^inbound-rtp',
-      iceServers: stunServers,
+    const player = new WHEPPlayer({
+      debug: isDebug,
+      videoElement: getVideoElement(),
+      onChatMessage: (event: SignalChatMessage) => {
+        addChatMessage(event.content, event.sender)
+      },
+      onClose: () => {
+        releaseWakeLock()
+        setWHEPPlayer(undefined)
+        setStreamSession(undefined)
+      },
     })
+    await player.start(sidParam, nameParam)
+    setStreamSession(player.getPlayingStream())
     setWHEPPlayer(player)
-    setStreamSession(sidParam)
-
-    addChatMessage(`loading ${sidParam}`)
-    player.on('no-media', () => {
-      addChatMessage('media timeout')
-      player.destroy()
-      setWHEPPlayer(undefined)
-      setStreamSession(undefined)
-      setPlayerDc(undefined)
-    })
-    player.load(new URL(getSessionUrl(sidParam))).then(() => {
-      const playerObj = player as never
-      const playerAdapter = playerObj['adapter'] as never
-      const localPeer = playerAdapter['localPeer'] as never
-      const bootstrapDc = localPeer['bootstrapDc'] as RTCDataChannel
-      const peer = localPeer as RTCPeerConnection
-
-      let signalConnected = false
-      let lastKick: number = 0
-      async function handleSignalEvent(event: SignalMessage, selfSid: string) {
-        const now = Date.now()
-        const signalEvent = event.content as SignalEvent
-        if (signalEvent.status == 'waiting') {
-          if (signalConnected || now - lastKick < 60000) return
-          if (await SignalPeer.kickSignal(signalEvent.sid)) {
-            console.log(APP_LOG, `${signalEvent.sid} kicked`)
-            lastKick = now
-          }
-        } else if (signalEvent.status == 'connected') {
-          if (selfSid === signalEvent.sid) {
-            signalConnected = true
-            addChatMessage(`${signalEvent.sid} joined (self)`)
-          } else {
-            addChatMessage(`${signalEvent.sid} joined`)
-          }
-        } else if (signalEvent.status == 'disconnected') {
-            addChatMessage(`${signalEvent.sid} left`)
-        }
-      }
-
-      function getPlayerSession(): string {
-        const resourceUrl = playerAdapter['resource'] as string
-        const playerSid = extractSessionIdFromUrl(resourceUrl)
-        setPlayerSession(playerSid)
-        return playerSid!
-      }
-
-      function initPlayerSignal() {
-        const playerSid = getPlayerSession()
-        // signal publisher
-        requestDataChannel(playerSid, peer, null, SignalPeer.label).then(dc => {
-          dc.onopen = () => {
-            console.log(APP_LOG, 'publisher dc open')
-          }
-          setPlayerDc(dc)
-        })
-        // signal subscriber
-        requestDataChannel(playerSid, peer, sidParam).then(dc => {
-          dc.onopen = () => {
-            console.log(APP_LOG, 'subscriber dc open')
-          }
-          dc.onmessage = async (ev) => {
-            if (isDebug)
-              console.log(DC_LOG, 'recv <<<', ev.data as string)
-            const event = JSON.parse(ev.data) as SignalMessage
-            if (event.type == 'signal') {
-              handleSignalEvent(event, playerSid)
-            } else if (event.type == 'chat') {
-              const text = event.content as string
-              const sender = event.sender == playerSid ? selfDisplayName : event.sender
-              addChatMessage(text, sender)
-            }
-          }
-        })
-      }
-
-      function jitterBufferConfig(target?: number) {
-        // set all receiver with the same buffer
-        peer.getReceivers().forEach(r => {
-          r.jitterBufferTarget = target ? target : jitterBufferTarget
-        })
-      }
-
-      bootstrapDc.onopen = () => {
-        addChatMessage(`connected ${sidParam}`)
-        console.log(APP_LOG, 'bootstarp open')
-        jitterBufferConfig()
-        initPlayerSignal()
-      }
-    })
   }
 
   function dataChannelSend(dc: RTCDataChannel, msg: SignalMessage, callback?: () => void) {
@@ -413,8 +310,9 @@ function App() {
       return
     }
     const msgObject = SignalPeer.newChatMsg(text)
+    const playerDc = whepPlayer?.getPlayerDc()
     if (playerDc) {
-      msgObject.sender = playerSession!
+      msgObject.sender = whepPlayer?.getPlayerSid()
       dataChannelSend(playerDc, msgObject)
       return
     }
@@ -610,10 +508,10 @@ function App() {
               if (streamSession) {
                 releaseWakeLock()
                 stopStream()
-                stop()
+                stopPlayer()
               } else {
                 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-                sidParam || nameParam ? play() : setShowHoverMenu(true)
+                sidParam || nameParam ? startPlayer() : setShowHoverMenu(true)
               }
             }}
           >

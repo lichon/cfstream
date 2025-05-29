@@ -56,8 +56,8 @@ export interface SignalMessage {
   sender?: string;
 }
 
-export interface ChatMessage {
-  content: unknown;
+export interface SignalChatMessage {
+  content: string;
   sender?: string;
 }
 
