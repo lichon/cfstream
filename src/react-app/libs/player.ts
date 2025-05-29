@@ -12,8 +12,8 @@ const LOG_TAG = 'Player'
 
 export interface PlayerConfig {
   videoElement: HTMLVideoElement
-  onOpen?: (sid: string) => void
   onChatMessage?: (message: string, from?: string) => void
+  onOpen?: (sid: string) => void
   onClose?: () => void
 }
 

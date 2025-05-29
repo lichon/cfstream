@@ -155,7 +155,6 @@ export class WHIPStreamer {
       await this.client.destroy()
       this.config.onClose?.()
       this.client = undefined
-      this.config.onChatMessage?.('client stopped')
     }
     if (this.signalPeer) {
       this.signalPeer.close()
