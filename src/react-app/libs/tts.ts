@@ -3,26 +3,21 @@ interface TTSOptions {
   rate?: number;
   pitch?: number;
   sinkId?: string;
-  mediaStream?: MediaStream;
   onEnd?: () => void;
 }
 
 export class ChromeTTS {
   private voices: SpeechSynthesisVoice[];
-  onVoicesLoaded: ((voices: SpeechSynthesisVoice[]) => void) | null;
   private audioElement;
+  private mediaStream?: MediaStream;
 
   constructor() {
     this.voices = [];
-    this.onVoicesLoaded = null;
     this.audioElement = document.createElement('audio');
 
     if (!ChromeTTS.isSupported()) return;
     window.speechSynthesis.onvoiceschanged = () => {
       this.voices = window.speechSynthesis.getVoices();
-      if (this.onVoicesLoaded) {
-        this.onVoicesLoaded(this.voices);
-      }
     };
   }
 
@@ -30,16 +25,16 @@ export class ChromeTTS {
     return this.voices;
   }
 
-  private async setSinkId(sinkId: string, mediaStream?: MediaStream): Promise<void> {
+  private async setSinkId(sinkId: string): Promise<void> {
     if (!('setSinkId' in HTMLAudioElement.prototype)) {
       console.warn('setSinkId is not supported in this browser.');
       return Promise.resolve();
     }
-    if (!mediaStream) {
+    if (!this.mediaStream) {
       return Promise.resolve();
     }
 
-    const audioTrack = mediaStream.getAudioTracks()[0]
+    const audioTrack = this.mediaStream.getAudioTracks()[0]
     const systemDefaultAudio = new MediaStream();
     systemDefaultAudio.addTrack(audioTrack);
 
@@ -69,17 +64,27 @@ export class ChromeTTS {
     }
   }
 
-  public async pipInput(redirectSound = false): Promise<MediaStream | undefined> {
+  get displayMedia(): MediaStream | undefined {
+    return this.mediaStream;
+  }
+
+  public async requestDisplayMedia() { 
+    this.mediaStream = await navigator.mediaDevices.getDisplayMedia({ audio: true });
+  }
+
+  public async releaseDisplayMedia() { 
+    this.mediaStream?.getTracks().forEach(track => track.stop());
+  }
+
+  public async pipInput(redirectSound = false) {
     // eslint-disable-next-line
     const pipWindow = await (window as any).documentPictureInPicture?.requestWindow()
     if (!pipWindow) return
-
-    let mediaStream: MediaStream | undefined = undefined
+    pipWindow.addEventListener('pagehide', () => {
+      this.releaseDisplayMedia()
+    })
     if (redirectSound) {
-      mediaStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
-      pipWindow.addEventListener('pagehide', () => {
-        mediaStream?.getTracks().forEach(track => track.stop())
-      })
+      this.requestDisplayMedia()
     }
 
     const tmpInput = document.createElement('input')
@@ -103,13 +108,11 @@ export class ChromeTTS {
         this.speak(txt, {
           rate: 2.0,
           sinkId: redirectSound ? 'communications' : undefined,
-          mediaStream: redirectSound ? mediaStream : undefined,
         })
       }
     })
     // Move the player to the Picture-in-Picture window.
     pipWindow.document.body.append(tmpInput)
-    return mediaStream
   }
 
   public speak(text: string, options: TTSOptions = {}): void {
@@ -128,7 +131,7 @@ export class ChromeTTS {
       }
     };
     if (options.sinkId !== undefined) {
-      this.setSinkId(options.sinkId, options.mediaStream).then(() => {
+      this.setSinkId(options.sinkId).then(() => {
         window.speechSynthesis.speak(utterance);
       }).catch(error => {
         console.error('Error setting sink ID:', error);

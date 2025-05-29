@@ -1,7 +1,6 @@
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
-import { SignalChatMessage, SignalMessage, SignalEvent, SignalPeer } from './signalpeer'
+import { SignalMessage, SignalEvent, SignalPeer } from './signalpeer'
 import { getSessionUrl, requestDataChannel, getSessionByName, extractSessionIdFromUrl } from './api'
-  
 import { getConfig } from '../config'
 
 let debug = getConfig().debug
@@ -9,11 +8,12 @@ const stunServers = getConfig().api.stunServers
 const defaultBufferTarget = getConfig().stream.jitterBufferTarget || 500
 const selfDisplayName = getConfig().ui.selfDisplayName
 
-const PLAYER_LOG = 'Player'
+const LOG_TAG = 'Player'
 
 export interface PlayerConfig {
   videoElement: HTMLVideoElement
-  onChatMessage?: (event: SignalChatMessage) => void
+  onOpen?: (sid: string) => void
+  onChatMessage?: (message: string, from?: string) => void
   onClose?: () => void
 }
 
@@ -40,18 +40,18 @@ export class WHEPPlayer {
     if (signalEvent.status == 'waiting') {
       if (this.signalConnected || now - this.lastKick < 60000) return
       if (await SignalPeer.kickSignal(signalEvent.sid)) {
-        console.log(PLAYER_LOG, `${signalEvent.sid} kicked`)
+        console.log(LOG_TAG, `signal session kicked ${signalEvent.sid}`)
         this.lastKick = now
       }
     } else if (signalEvent.status == 'connected') {
       if (selfSid === signalEvent.sid) {
         this.signalConnected = true
-        this.config.onChatMessage?.({ content: `${signalEvent.sid} joined (self)` })
+        this.config.onChatMessage?.(`${signalEvent.sid} joined (self)`)
       } else {
-        this.config.onChatMessage?.({ content: `${signalEvent.sid} joined` })
+        this.config.onChatMessage?.(`${signalEvent.sid} joined`)
       }
     } else if (signalEvent.status == 'disconnected') {
-      this.config.onChatMessage?.({ content: `${signalEvent.sid} left` })
+      this.config.onChatMessage?.(`${signalEvent.sid} left`)
     }
   }
 
@@ -59,7 +59,7 @@ export class WHEPPlayer {
     const resourceUrl = playerAdapter['resource'] as string
     const playerSid = extractSessionIdFromUrl(resourceUrl)
     if (!playerSid?.length) {
-      console.error(PLAYER_LOG, 'invalid session id')
+      console.error(LOG_TAG, 'invalid session id')
       return
     }
     this.playerSid = playerSid
@@ -67,14 +67,14 @@ export class WHEPPlayer {
     // signal publisher
     requestDataChannel(playerSid, peer, null, SignalPeer.label).then(dc => {
       dc.onopen = () => {
-        console.log(PLAYER_LOG, 'publisher dc open')
+        console.log(LOG_TAG, 'publisher dc open')
       }
       this.playerDc = dc
     })
     // signal subscriber
     requestDataChannel(playerSid, peer, sidParam).then(dc => {
       dc.onopen = () => {
-        console.log(PLAYER_LOG, 'subscriber dc open')
+        console.log(LOG_TAG, 'subscriber dc open')
       }
       dc.onmessage = async (ev) => {
         if (debug)
@@ -85,7 +85,7 @@ export class WHEPPlayer {
         } else if (event.type === 'chat') {
           const text = event.content as string
           const sender = event.sender === playerSid ? selfDisplayName : event.sender
-          this.config.onChatMessage?.({ content: text, sender })
+          this.config.onChatMessage?.(text, sender)
         }
       }
     })
@@ -98,14 +98,14 @@ export class WHEPPlayer {
   }
 
   public async start(sidParam?: string, nameParam?: string) {
-    const { videoElement, onChatMessage } = this.config
+    const { videoElement, onOpen, onChatMessage } = this.config
 
     if (this.player || !videoElement) return
 
     if (nameParam?.length) {
       sidParam = await getSessionByName(nameParam)
       if (!sidParam?.length) {
-        onChatMessage?.({ content: 'session not found' })
+        onChatMessage?.('session not found')
         return
       }
     }
@@ -121,11 +121,11 @@ export class WHEPPlayer {
     })
 
     player.on('no-media', () => {
-      onChatMessage?.({ content: 'media timeout' })
+      onChatMessage?.('media timeout')
       this.destroy()
     })
 
-    onChatMessage?.({ content: `loading ${sidParam}` })
+    onChatMessage?.(`loading ${sidParam}`)
     player.load(new URL(getSessionUrl(sidParam))).then(() => {
       const playerObj = player as never
       const playerAdapter = playerObj['adapter'] as never
@@ -134,9 +134,9 @@ export class WHEPPlayer {
       const peer = localPeer as RTCPeerConnection
 
       bootstrapDc.onopen = () => {
-        onChatMessage?.({ content: `connected ${sidParam}` })
         this.jitterBufferConfig(peer)
         this.initPlayerSignal(peer, playerAdapter, sidParam)
+        onOpen?.(sidParam)
       }
     })
     this.playingStream = sidParam

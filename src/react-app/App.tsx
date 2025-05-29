@@ -6,36 +6,24 @@ import './App.css'
 import { getConfig } from './config'
 import { useWakeLock } from './hooks/wake-lock'
 
-import { WHIPClient } from '@eyevinn/whip-web-client'
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
-import { SignalPeer, SignalChatMessage, patchRTCPeerConnection } from './libs/signalpeer'
+import { SignalPeer, patchRTCPeerConnection } from './libs/signalpeer'
 import { ChromeTTS } from './libs/tts'
 import { WHEPPlayer } from './libs/player'
-import {
-  requestDataChannel,
-  getSessionInfo,
-  getSessionUrl,
-  getPlayerUrl,
-  extractSessionIdFromUrl,
-  setSessionByName,
-} from './libs/api'
+import { WHIPStreamer } from './libs/streamer'
+import { getPlayerUrl } from './libs/api'
 
 let _firstLoad = true
 const sidParam = new URLSearchParams(window.location.search).get('sid') || undefined
 const nameParam = new URLSearchParams(window.location.search).get('name') || undefined
 const roomParam = new URLSearchParams(window.location.search).get('room') || undefined
 const SYSTEM_LOG = 'System'
-const APP_LOG = 'App'
-const DC_LOG = 'DataChannel'
 
 const chatCmdList = getConfig().ui.cmdList
-const broadcastInterval = getConfig().stream.broadcastInterval
-const videoMaxBitrate = getConfig().stream.videoBitrate
 const maxHistoryMessage = getConfig().ui.maxHistoryMessage
 const openLinkOnShare = getConfig().ui.openLinkOnShare
-const stunServers = getConfig().api.stunServers
 const isMoblie = getConfig().ui.isMobilePlatform
 const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
@@ -49,21 +37,18 @@ function getVideoElement() {
 patchRTCPeerConnection()
 
 function App() {
-  const signalPeer = useMemo(() => new SignalPeer(), [])
   const ttsPlayer = useMemo(() => new ChromeTTS(), [])
   const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock()
   const [streamSession, setStreamSession] = useState<string>()
-  const [whipClient, setWHIPClient] = useState<WHIPClient>()
+  const [whipStreamer, setWHIPStreamer] = useState<WHIPStreamer>()
   const [whepPlayer, setWHEPPlayer] = useState<WHEPPlayer>()
   const [qrVisible, setQrVisible] = useState(false)
   const [logVisible, setLogVisible] = useState(false)
   const [chatVisible, setChatVisible] = useState(true)
   const [showHoverMenu, setShowHoverMenu] = useState(false)
-  const [streamerDc, setStreamerDc] = useState<RTCDataChannel>()
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(true);
   const [isScreenShare, setScreenShare] = useState(true);
-  const [ttsMediaStream, setTTSMediaStream] = useState<MediaStream | undefined>(undefined);
 
   useEffect(() => {
     if (_firstLoad) {
@@ -99,15 +84,14 @@ function App() {
       if (!data?.length) return
       ttsPlayer.speak(data, {
         rate: 2.0,
-        sinkId: ttsMediaStream ? 'communications' : undefined,
-        mediaStream: ttsMediaStream || undefined,
+        sinkId: ttsPlayer.displayMedia ? 'communications' : undefined,
       })
     }
     import.meta.hot.on('custom:tts', handler)
     return () => {
       import.meta.hot?.off('custom:tts', handler)
     }
-  }, [ttsMediaStream, ttsPlayer])
+  }, [ttsPlayer])
 
   function help() {
     addChatMessage('type /? for help')
@@ -122,11 +106,18 @@ function App() {
     if (whepPlayer)
       return
 
-    requestWakeLock()
+    if (!nameParam?.length && !sidParam?.length) {
+      return
+    }
+
     const player = new WHEPPlayer({
       videoElement: getVideoElement(),
-      onChatMessage: (event: SignalChatMessage) => {
-        addChatMessage(event.content, event.sender)
+      onChatMessage: (message: string, from?: string) => {
+        addChatMessage(message, from)
+      },
+      onOpen: (sid: string) => {
+        requestWakeLock()
+        setStreamSession(sid)
       },
       onClose: () => {
         releaseWakeLock()
@@ -135,53 +126,7 @@ function App() {
       },
     })
     await player.start(sidParam, nameParam)
-    setStreamSession(player.getPlayingStream())
     setWHEPPlayer(player)
-  }
-
-  function startSignalPeer(sessionId: string, broadcastDc: RTCDataChannel) {
-    let broadcastTimeout: NodeJS.Timeout
-
-    signalPeer.onBootstrapReady(() => {
-      clearTimeout(broadcastTimeout)
-      // bootstrap connected, broadcast self to subs
-      const bootSid = signalPeer.getBroadcastSid()
-      const signalEvent = SignalPeer.newSignalEvent('waiting', bootSid!)
-      const callback = () => {
-        broadcastTimeout = setTimeout(() => {
-          SignalPeer.send(broadcastDc, signalEvent, callback)
-        }, broadcastInterval)
-      }
-      SignalPeer.send(broadcastDc, signalEvent, callback)
-    })
-    signalPeer.onBootstrapKicked(() => {
-      clearTimeout(broadcastTimeout)
-      // bootstrap kicked, connect signal to new sub
-      getSessionInfo(sessionId).then(info => {
-        info.subs.forEach(sid => signalPeer.newSignalDc(sid))
-        signalPeer.clearInvalidDc(info.subs)
-      })
-    })
-    signalPeer.onOpen((sid: string) => {
-      addChatMessage(`${sid} joined`)
-      SignalPeer.send(broadcastDc, SignalPeer.newSignalEvent('connected', sid))
-    })
-    signalPeer.onClose((sid: string) => {
-      addChatMessage(`${sid} left`)
-      SignalPeer.send(broadcastDc, SignalPeer.newSignalEvent('disconnected', sid))
-    })
-    signalPeer.onMessage((sid: string, ev) => {
-      const msg = JSON.parse(ev.data);
-      if (msg.type === 'chat') {
-        addChatMessage(msg.content, sid)
-        // broadcast to all subs
-        SignalPeer.send(broadcastDc, ev.data)
-      }
-      // TODO supoprt rpc
-    })
-    signalPeer.start().catch(() => {
-      addChatMessage('signal peer start error')
-    })
   }
 
   async function handleCmd(text: string) {
@@ -195,6 +140,7 @@ function App() {
         setLogVisible(debugEnabled)
         SignalPeer.enableDebug(debugEnabled)
         WHEPPlayer.enableDebug(debugEnabled)
+        WHIPStreamer.enableDebug(debugEnabled)
         addChatMessage(`debug enabled ${debugEnabled}`)
         break
       case '/buffer':
@@ -228,7 +174,7 @@ function App() {
         if (ttsEnabled) ttsPlayer.pipInput()
         break
       case '/rtts':
-        if (ttsEnabled) setTTSMediaStream(await ttsPlayer.pipInput(true))
+        if (ttsEnabled) ttsPlayer.pipInput(true)
         break
       case '/vu':
       case '/volumeUp':
@@ -257,6 +203,7 @@ function App() {
       SignalPeer.send(playerDc, msgObject)
       return
     }
+    const streamerDc = whipStreamer?.getStreamerDc()
     if (streamerDc) {
       msgObject.sender = ownerDisplayName
       SignalPeer.send(streamerDc, msgObject, () => {
@@ -286,155 +233,46 @@ function App() {
     })
   }
 
-  function setVideoBitrate(peer: RTCPeerConnection, videoTrack?: MediaStreamTrack) {
-    if (!videoTrack) {
-      console.error(APP_LOG, 'no video track')
-      return
-    }
-    const sender = peer.getSenders().find(s => s.track?.id == videoTrack.id)
-    if (sender) {
-      console.log(APP_LOG, 'set sender maxBitrate')
-      const params = sender.getParameters()
-      params.encodings = [{
-        maxBitrate: videoMaxBitrate,
-      }]
-      sender.setParameters(params)
-    } else {
-      console.log(APP_LOG, 'failed to get sender', peer)
-    }
-  }
-
   async function switchMedia() {
-    const video = getVideoElement()
-    if (!video || !whipClient) return
-
-    const newFacingMode = isFrontCamera ? 'environment' : 'user'
     setIsFrontCamera(!isFrontCamera)
     setScreenShare(!isScreenShare)
-
-    // Get new media stream with switched camera
-    const newStream = await getMediaStream(!isScreenShare, newFacingMode)
-
-    // Replace video track
-    const oldStream = video.srcObject as MediaStream
-    const oldTrack = oldStream.getVideoTracks()[0]
-    const newTrack = newStream.getVideoTracks()[0]
-    newStream.getTracks().forEach(t => {
-      if (t !== newTrack) t.stop()
-    })
-
-    const anyClient = whipClient as never
-    const peer = anyClient['peer'] as RTCPeerConnection
-    // Replace track in peer connection
-    const sender = peer.getSenders().find(
-      s => s.track?.id === oldTrack.id
-    )
-    if (sender) {
-      await sender.replaceTrack(newTrack)
-    }
-
-    // Replace track in video element
-    oldTrack.stop()
-    oldStream.removeTrack(oldTrack)
-    oldStream.addTrack(newTrack)
-  }
-
-  async function getMediaStream(shareScreen?: boolean, facingMode?: string) {
-    let ret
-    if (shareScreen && navigator.mediaDevices.getDisplayMedia) {
-      setScreenShare(true)
-      ret = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 15 },
-        },
-        audio: true,
-      })
-    } else {
-      setScreenShare(false)
-      ret = await navigator.mediaDevices.getUserMedia({
-        video: {
-          frameRate: { ideal: 30 },
-          facingMode: facingMode || 'environment'
-        },
-        audio: { deviceId: 'communications' },
-      })
-    }
-    return ret
-  }
-
-  async function setSessionName(sid: string) {
-    if (!roomParam?.length)
-      return
-    const res = await setSessionByName(roomParam, sid)
-    if (res.status == 200) {
-      addChatMessage(`set room ${roomParam} session to ${sid}`)
-    }
+    whipStreamer?.switchMedia(!isScreenShare, !isFrontCamera)
   }
 
   async function stopStream() {
-    if (whipClient) {
+    if (whipStreamer) {
       try {
-        await whipClient.destroy()
+        await whipStreamer.stop()
       } finally {
-        setWHIPClient(undefined)
+        setWHIPStreamer(undefined)
         setStreamSession(undefined)
       }
-      signalPeer.close()
-      addChatMessage('client closed')
     }
   }
 
   async function startStream(shareScreen?: boolean) {
-    requestWakeLock()
     setShowHoverMenu(false)
 
     addChatMessage('getting media from user')
-    const mediaStream = await getMediaStream(shareScreen)
-    const videoTrack = mediaStream.getVideoTracks().find(t => t.enabled)
-    console.log(APP_LOG, `video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
+    const mediaStream = await WHIPStreamer.getMediaStream(shareScreen)
 
-    const client = new WHIPClient({
-      endpoint: getSessionUrl(),
-      opts: {
-        debug: debugEnabled,
-        noTrickleIce: true,
-        iceServers: stunServers,
+    requestWakeLock()
+    const streamer = new WHIPStreamer({
+      sessionName: roomParam,
+      videoElement: getVideoElement(),
+      onChatMessage: (message, from) => {
+        addChatMessage(message, from)
       },
-      peerConnectionFactory: (config: RTCConfiguration) => {
-        const peer = new RTCPeerConnection(config)
-        peer.addEventListener('connectionstatechange', () => {
-          console.log(APP_LOG, `client peer ${peer.connectionState}`)
-          if (peer.connectionState == 'connected') {
-            client.getResourceUrl().then(resUrl => {
-              const sid = extractSessionIdFromUrl(resUrl)
-              requestDataChannel(sid!, peer).then(dc => {
-                dc.onclose = () => {
-                  console.log(DC_LOG, 'client dc close')
-                }
-                dc.onopen = () => {
-                  console.log(DC_LOG, 'client dc open')
-                  startSignalPeer(sid!, dc)
-                }
-                setStreamerDc(dc)
-              })
-              setSessionName(sid!)
-            })
-            addChatMessage('client connected')
-            setVideoBitrate(peer, videoTrack)
-          }
-        })
-        return peer
+      onOpen: (sid) => {
+        setStreamSession(sid)
+        addChatMessage('client connected')
+      },
+      onClose: () => {
+        addChatMessage('client closed')
       }
     })
-    addChatMessage('client starting')
-    await client.setIceServersFromEndpoint()
-    await client.ingest(mediaStream)
-    const resourceUrl = await client.getResourceUrl()
-    setStreamSession(extractSessionIdFromUrl(resourceUrl))
-    setWHIPClient(client)
-    getVideoElement().srcObject = mediaStream
+    await streamer.start(mediaStream)
+    setWHIPStreamer(streamer)
   }
 
   return (
