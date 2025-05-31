@@ -50,11 +50,23 @@ function App() {
   const [isFrontCamera, setIsFrontCamera] = useState(false)
   const [isScreenShare, setScreenShare] = useState(false)
 
+  function viteTTS() {
+    if (import.meta.hot) {
+      import.meta.hot.on('custom:tts', (data: string) => {
+        ttsPlayer.speak(data, {
+          rate: 2.0,
+          sinkId: ttsPlayer.displayMedia ? 'communications' : undefined,
+        })
+      })
+    }
+  }
+
   useEffect(() => {
     if (_firstLoad) {
       _firstLoad = false
       help()
       startPlayer()
+      viteTTS()
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -71,27 +83,13 @@ function App() {
         handleCmd('/mute')
       }
     }
+
     window.addEventListener('keydown', handleKeyDown)
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
-    };
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
-
-  useEffect(() => {
-    if (!import.meta.hot) return
-    const handler = (data: string) => {
-      if (!data?.length) return
-      ttsPlayer.speak(data, {
-        rate: 2.0,
-        sinkId: ttsPlayer.displayMedia ? 'communications' : undefined,
-      })
-    }
-    import.meta.hot.on('custom:tts', handler)
-    return () => {
-      import.meta.hot?.off('custom:tts', handler)
-    }
-  }, [ttsPlayer])
 
   function help() {
     addChatMessage('type /? for help')

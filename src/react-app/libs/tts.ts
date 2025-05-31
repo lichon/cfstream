@@ -116,6 +116,7 @@ export class ChromeTTS {
   }
 
   public speak(text: string, options: TTSOptions = {}): void {
+    if (!text?.length) return
     this.stop();
     const utterance = new SpeechSynthesisUtterance(text);
     this.configureUtterance(utterance, options);
