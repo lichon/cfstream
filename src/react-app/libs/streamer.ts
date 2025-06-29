@@ -147,7 +147,7 @@ export class WHIPStreamer {
     await this.client.ingest(mediaStream)
     this.config.videoElement.srcObject = mediaStream
     this.streamerSid = extractSessionIdFromUrl(await this.client.getResourceUrl() || '')
-    this.setSessionName(this.streamerSid!)
+    this.setSessionName(this.streamerSid!, this.config.sessionName)
   }
 
   async stop() {

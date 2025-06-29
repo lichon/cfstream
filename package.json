@@ -44,10 +44,10 @@
     "build": "tsc -b && vite build",
     "cf-typegen": "wrangler types",
     "check": "tsc && vite build && wrangler deploy --dry-run",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "pnpm run build && wrangler deploy",
     "dev": "vite --host",
     "lint": "eslint .",
-    "preview": "npm run build && vite preview"
+    "preview": "pnpm run build && vite preview"
   },
   "type": "module",
   "packageManager": "pnpm@9.10.0"
