@@ -122,9 +122,15 @@ const sendWebHook = async (hookURL: string, message: string) => {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+import { connect } from "cloudflare:sockets";
+
 app.get('/node', async (c) => {
-  const res = await fetch('https://www.nodejs.org')
-  return c.body(await res.text(), 200)
+  const remoteSocket = connect({hostname: 'nodejs.org', port: 80})
+  const writer = remoteSocket.writable.getWriter()
+  const encoder = new TextEncoder()
+  await writer.write(encoder.encode('GET / HTTP/1.1\r\nHost: nodejs.org\r\nConnection: close\r\n\r\n'))
+  writer.releaseLock()
+  return c.newResponse(remoteSocket.readable, 200)
 })
 
 app.get('/api', (c) => c.text(randomUUID()))

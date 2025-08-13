@@ -26,7 +26,6 @@
 	},
 	"assets": {
 		"directory": "./src/",
-		"not_found_handling": "single-page-application"
 	}
 	/**
 	 * Smart Placement
