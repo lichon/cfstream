@@ -125,12 +125,13 @@ const app = new Hono<{ Bindings: Bindings }>()
 import { connect } from "cloudflare:sockets";
 
 app.get('/node', async (c) => {
-  const remoteSocket = connect({hostname: 'nodejs.org', port: 80})
+  const remoteSocket = connect({hostname: '104.20.1.252', port: 80})
   const writer = remoteSocket.writable.getWriter()
   const encoder = new TextEncoder()
   await writer.write(encoder.encode('GET / HTTP/1.1\r\nHost: nodejs.org\r\nConnection: close\r\n\r\n'))
   writer.releaseLock()
-  return c.newResponse(remoteSocket.readable, 200)
+  console.log('connected to nodejs.org', remoteSocket)
+  return c.newResponse(remoteSocket.readable)
 })
 
 app.get('/api', (c) => c.text(randomUUID()))
