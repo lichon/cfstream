@@ -122,6 +122,11 @@ const sendWebHook = async (hookURL: string, message: string) => {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+app.get('/node', async (c) => {
+  const res = await fetch('https://www.nodejs.org')
+  return c.body(await res.text(), 200)
+})
+
 app.get('/api', (c) => c.text(randomUUID()))
 
 // api create live room
