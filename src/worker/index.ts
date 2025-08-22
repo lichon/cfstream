@@ -122,16 +122,8 @@ const sendWebHook = async (hookURL: string, message: string) => {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-import { connect } from "cloudflare:sockets";
-
-app.get('/node', async (c) => {
-  const remoteSocket = connect({hostname: '104.20.1.252', port: 80})
-  const writer = remoteSocket.writable.getWriter()
-  const encoder = new TextEncoder()
-  await writer.write(encoder.encode('GET / HTTP/1.1\r\nHost: nodejs.org\r\nConnection: close\r\n\r\n'))
-  writer.releaseLock()
-  console.log('connected to nodejs.org', remoteSocket)
-  return c.newResponse(remoteSocket.readable)
+app.get('/', async (c) => {
+  return c.text('hello world')
 })
 
 app.get('/api', (c) => c.text(randomUUID()))
@@ -160,8 +152,25 @@ app.get('/api/rooms/:name', async (c) => {
 // api create session
 app.post('/api/sessions', async (c) => {
   const sdp = await c.req.text()
-  const session = await newSession(c.env.RTC_API_TOKEN)
+  if (!sdp?.length) {
+    return c.text('invalid request', 400)
+  }
+  const hasMedia = sdp.includes('m=audio') || sdp.includes('m=video')
+  const dcOnly = !hasMedia && sdp.includes('m=application')
+  if (!hasMedia && !dcOnly) {
+    return c.text('invalid request', 400)
+  }
+
+  const session = await newSession(c.env.RTC_API_TOKEN, dcOnly ? createTracksRequest(sdp).sessionDescription : undefined)
   const sid = session.sessionId
+
+  console.log(`new ${hasMedia ? 'stream' : 'dc'} session ${sid}`)
+  if (dcOnly) {
+    c.header('Location', `sessions/dc/${sid}`)
+    c.header('Access-Control-Expose-Headers', 'Location')
+    c.header('Access-Control-Allow-Origin', '*')
+    return c.text(session.sessionDescription?.sdp || '')
+  }
   const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
     method: 'POST',
     body: JSON.stringify(createTracksRequest(sdp))
@@ -169,9 +178,7 @@ app.post('/api/sessions', async (c) => {
     return c.text('new tracks error', 500)
   })
   const tracksRes = await res.json() as TracksResponse
-  const hasMedia = sdp.includes('m=audio') || sdp.includes('m=video')
 
-  console.log(`new ${hasMedia ? 'stream' : 'dc'} session ${sid}`)
   if (c.env.WEB_HOOK?.length) {
     await sendWebHook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}_`)
   }

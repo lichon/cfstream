@@ -123,7 +123,7 @@ export async function requestDataChannel(
   }])
   if (!dcRes.dataChannels.length || !dcRes.dataChannels[0].id) {
     // never open dc
-    return new RTCDataChannel()
+    return {} as RTCDataChannel
   }
   const dc = peer.createDataChannel(label ?? BROADCAST_LABEL, {
     negotiated: true,

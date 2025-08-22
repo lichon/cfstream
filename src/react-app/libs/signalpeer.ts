@@ -111,8 +111,8 @@ export class SignalPeer {
     debug = enable
   }
 
-  static send(dc: RTCDataChannel, msg: SignalMessage, callback?: () => void) {
-    if (dc.readyState == 'open') { const msgString = typeof msg === 'string' ? msg : JSON.stringify(msg)
+  static send(dc?: RTCDataChannel, msg?: SignalMessage, callback?: () => void) {
+    if (dc && dc.readyState == 'open') { const msgString = typeof msg === 'string' ? msg : JSON.stringify(msg)
       dc.send(msgString)
       if (debug) console.log(DC_TAG, `send >>>`, msgString)
       if (callback) callback()
@@ -183,22 +183,16 @@ export class SignalPeer {
     const connected = new Promise((resolve, reject) => {
       peer.onconnectionstatechange = () => {
         console.log(SIGNAL_TAG, `bootstrap ${this.bootstrapSid} ${peer.connectionState}`)
-
-        const peerConnected = peer.connectionState == 'connected'
-        const changed = lastConnected != peerConnected
-        lastConnected = peerConnected
-
         if (peer.connectionState == 'failed') {
           reject()
           return
         }
-        if (!changed)
-          return
 
-        if (peerConnected) {
+        if (peer.connectionState == 'connected') {
+          lastConnected = true
           resolve(undefined)
           if (this.onBootstrapCallback) this.onBootstrapCallback()
-        } else {
+        } else if (lastConnected) {
           this.bootstrapSid = undefined
           this.bootstrapPeer = null
           // restart
@@ -210,9 +204,8 @@ export class SignalPeer {
       }
     })
 
-    const offer = await peer.createOffer()
-    await peer.setLocalDescription(offer)
-    const res = await createSession(offer.sdp)
+    await peer.setLocalDescription(await peer.createOffer())
+    const res = await createSession(peer.localDescription?.sdp)
     if (!res?.sessionDescription) {
       peer.close()
       throw new Error('failed to create session')
@@ -231,22 +224,15 @@ export class SignalPeer {
     const connected = new Promise((resolve, reject) => {
       peer.onconnectionstatechange = () => {
         console.log(SIGNAL_TAG, `signal ${this.signalSid} ${peer.connectionState}`)
-
-        const failed = peer.connectionState == 'failed'
-        const peerConnected = peer.connectionState == 'connected'
-        const changed = lastConnected != peerConnected
-        lastConnected = peerConnected
-
         if (peer.connectionState == 'failed') {
           reject()
           return
         }
-        if (!changed)
-          return
 
-        if (peerConnected) {
+        if (peer.connectionState == 'connected') {
+          lastConnected = true
           resolve(undefined)
-        } else if (failed) {
+        } else if (lastConnected) {
           this.signalDcMap.forEach(dc => dc.close())
           this.signalDcMap.clear()
           // restart
@@ -256,9 +242,8 @@ export class SignalPeer {
       }
     })
 
-    const offer = await peer.createOffer()
-    await peer.setLocalDescription(offer)
-    const res = await createSession(offer.sdp)
+    await peer.setLocalDescription(await peer.createOffer())
+    const res = await createSession(peer.localDescription?.sdp)
     if (!res?.sessionDescription) {
       peer.close()
       throw new Error('failed to create session')

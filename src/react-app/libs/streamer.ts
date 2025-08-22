@@ -171,7 +171,7 @@ export class WHIPStreamer {
     }
   }
 
-  private startSignalPeer(sessionId: string, broadcastDc: RTCDataChannel) {
+  private startSignalPeer(sessionId: string, broadcastDc?: RTCDataChannel) {
     let broadcastTimeout: NodeJS.Timeout
 
     const signalPeer = new SignalPeer()
