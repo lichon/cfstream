@@ -63,6 +63,12 @@ interface LiveRoom {
   sid: string
 }
 
+interface SignalRoom {
+  notifySid: string
+  offer: string
+  answer: string
+}
+
 const randomUUID = () => {
   const array = new Uint8Array(16)
   crypto.getRandomValues(array)
@@ -128,6 +134,27 @@ app.get('/', async (c) => {
 
 app.get('/api', (c) => c.text(randomUUID()))
 
+// api create signal room
+app.post('/api/signals/:name', async (c) => {
+  const name = c.req.param('name')
+  if (!name?.length || name === 'null' || name === 'undefined') {
+    return c.text('invalid signal room', 400)
+  }
+  const signalRoom = await c.req.json() as SignalRoom
+  await setSignalRoom(c.env.KVASA, name, signalRoom)
+  return c.json({}, 200)
+})
+
+// api get signal room
+app.post('/api/signals/:name', async (c) => {
+  const name = c.req.param('name')
+  if (!name?.length || name === 'null' || name === 'undefined') {
+    return c.text('invalid room', 404)
+  }
+  const room = await getSignalRoom(c.env.KVASA, name)
+  return room ? c.json(room, 200) : c.text('signal room not found', 404)
+})
+
 // api create live room
 app.post('/api/rooms/:name', async (c) => {
   const name = c.req.param('name')
@@ -161,7 +188,8 @@ app.post('/api/sessions', async (c) => {
     return c.text('invalid request', 400)
   }
 
-  const session = await newSession(c.env.RTC_API_TOKEN, dcOnly ? createTracksRequest(sdp).sessionDescription : undefined)
+  const session = await newSession(c.env.RTC_API_TOKEN,
+    dcOnly ? createTracksRequest(sdp).sessionDescription : undefined)
   const sid = session.sessionId
 
   console.log(`new ${hasMedia ? 'stream' : 'dc'} session ${sid}`)
@@ -296,6 +324,15 @@ app.get('/api/sessions/:sid', async (c) => {
   status.subs = subs.length ? subs : []
   return c.json(status)
 })
+
+// signal room caches
+async function getSignalRoom(kv: KVNamespace, name: string) {
+  return await kv.get<SignalRoom>('signal:' + name)
+}
+
+async function setSignalRoom(kv: KVNamespace, name: string, signalRoom: SignalRoom) {
+  return await kv.put('signal:' + name, JSON.stringify(signalRoom))
+}
 
 // session name caches
 async function getLiveSession(kv: KVNamespace, name: string) {
