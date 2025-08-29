@@ -146,7 +146,7 @@ app.post('/api/signals/:name', async (c) => {
 })
 
 // api get signal room
-app.post('/api/signals/:name', async (c) => {
+app.get('/api/signals/:name', async (c) => {
   const name = c.req.param('name')
   if (!name?.length || name === 'null' || name === 'undefined') {
     return c.text('invalid room', 404)
