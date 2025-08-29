@@ -138,7 +138,7 @@ app.get('/api', (c) => c.text(randomUUID()))
 app.post('/api/signals/:name', async (c) => {
   const name = c.req.param('name')
   if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.text('invalid signal room', 400)
+    return c.json({}, 400)
   }
   const signalRoom = await c.req.json() as SignalRoom
   await setSignalRoom(c.env.KVASA, name, signalRoom)
@@ -149,10 +149,10 @@ app.post('/api/signals/:name', async (c) => {
 app.get('/api/signals/:name', async (c) => {
   const name = c.req.param('name')
   if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.text('invalid room', 404)
+    return c.json({}, 404)
   }
   const room = await getSignalRoom(c.env.KVASA, name)
-  return room ? c.json(room, 200) : c.text('signal room not found', 404)
+  return room ? c.json(room, 200) : c.json({}, 404)
 })
 
 // api create live room
@@ -327,7 +327,8 @@ app.get('/api/sessions/:sid', async (c) => {
 
 // signal room caches
 async function getSignalRoom(kv: KVNamespace, name: string) {
-  return await kv.get<SignalRoom>('signal:' + name)
+  const signalStr = await kv.get('signal:' + name)
+  return signalStr ? JSON.parse(signalStr) as SignalRoom : null
 }
 
 async function setSignalRoom(kv: KVNamespace, name: string, signalRoom: SignalRoom) {
