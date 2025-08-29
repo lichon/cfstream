@@ -64,7 +64,7 @@ interface LiveRoom {
 }
 
 interface SignalRoom {
-  notifySid: string
+  sid: string
   offer: string
   answer: string
 }
