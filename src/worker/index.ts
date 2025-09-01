@@ -234,11 +234,11 @@ app.patch('/api/sessions/:sid', async (c) => {
     // const kickBySubSession = c.req.header('X-Sub-Session')
     // this would break the session's ice connection by cf sfu
     const sdp = await c.req.text()
-    await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
+    return await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
       method: 'POST',
       body: JSON.stringify(createTracksRequest(sdp))
     })
-    return c.text('ok', 201)
+    // return c.text('ok', 201)
   }
 
   const patch = await c.req.json() as PatchRequest
