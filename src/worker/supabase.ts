@@ -50,7 +50,7 @@ export async function getStreamRoom(c: Context, name: string): Promise<string | 
     .single()
 
   if (error) {
-    console.error('Error fetching signal room:', error)
+    console.error('Error fetching stream room:', error)
     return null
   }
 
@@ -63,7 +63,7 @@ export async function setStreamRoom(c: Context, name: string, stream_id: string)
     .upsert({ name, stream_id })
 
   if (error) {
-    console.error('Error setting signal room:', error)
+    console.error('Error setting stream room:', error)
     return false
   }
 

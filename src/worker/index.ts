@@ -1,6 +1,6 @@
 import { Hono, Context } from 'hono'
 import {
-  setSignal, getSignal, SignalRoom
+  setSignal, getSignal, SignalRoom,
   setStreamRoom, getStreamRoom
 } from './supabase'
 
