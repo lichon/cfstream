@@ -69,3 +69,87 @@ export async function setStreamRoom(c: Context, name: string, stream_id: string)
 
   return true
 }
+
+export async function getStreamSecret(c: Context, sid: string): Promise<string | null> {
+  const { data, error } = await getSupabase(c)
+    .from('secrets')
+    .select('secret')
+    .eq('id', sid)
+    .single()
+
+  if (error) {
+    console.error('Error fetching stream secret:', error)
+    return null
+  }
+
+  return data.secret
+}
+
+export async function setStreamSecret(c: Context, sid: string, secret: string): Promise<boolean> {
+  const { error } = await getSupabase(c)
+    .from('secrets')
+    .upsert({ id: sid, secret })
+
+  if (error) {
+    console.error('Error setting stream secret:', error)
+    return false
+  }
+
+  return true
+}
+
+export async function delStreamSecret(c: Context, sid: string): Promise<boolean> {
+  const { error } = await getSupabase(c)
+    .from('secrets')
+    .delete()
+    .eq('id', sid)
+
+  if (error) {
+    console.error('Error deleting stream secret:', error)
+    return false
+  }
+
+  return true
+}
+
+export async function getStreamSubs(c: Context, sid: string): Promise<Array<string>> {
+  const { data, error } = await getSupabase(c)
+    .from('subs')
+    .select('sub_sid')
+    .eq('id', sid)
+    .limit(100)
+
+  if (error) {
+    console.error('Error fetching stream subs:', error)
+    return []
+  }
+
+  return data.map(x => x.sub_sid)
+}
+
+export async function putStreamSubs(c: Context, sid: string, sub_sid: string): Promise<boolean> {
+  const { error } = await getSupabase(c)
+    .from('subs')
+    .upsert({ id: sid, sub_sid })
+
+  if (error) {
+    console.error('Error putting stream sub:', error)
+    return false
+  }
+
+  return true
+}
+
+export async function delStreamSubs(c: Context, sid: string): Promise<boolean> {
+  const { error } = await getSupabase(c)
+    .from('subs')
+    .delete()
+    .eq('id', sid)
+
+  if (error) {
+    console.error('Error deleting stream secret:', error)
+    return false
+  }
+
+  return true
+}

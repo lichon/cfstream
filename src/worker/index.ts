@@ -1,11 +1,12 @@
 import { Hono, Context } from 'hono'
 import {
   setSignal, getSignal, SignalRoom,
-  setStreamRoom, getStreamRoom
+  setStreamRoom, getStreamRoom,
+  setStreamSecret, getStreamSecret, delStreamSecret,
+  getStreamSubs, putStreamSubs, delStreamSubs,
 } from './supabase'
 
 type Bindings = {
-  KVASA: KVNamespace
   RTC_APP_ID: string
   RTC_API_URL: string
   RTC_API_TOKEN: string
@@ -195,7 +196,7 @@ app.post('/api/sessions', async (c) => {
 
   // create session secret
   const secret = crypto.randomUUID()
-  await putSessionSecret(c.env.KVASA, sid, secret)
+  await setStreamSecret(c, sid, secret)
 
   c.header('Location', `sessions/${secret}/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
@@ -250,7 +251,7 @@ app.patch('/api/sessions/:sid', async (c) => {
 app.delete('/api/sessions/:secret/:sid', async (c) => {
   const sid = c.req.param('sid')
   const secret = c.req.param('secret')
-  const sessionSecret = await getSessionSecret(c.env.KVASA, sid)
+  const sessionSecret = await getStreamSecret(c, sid)
   // check secret for session
   if (!sid || secret !== sessionSecret) {
     return c.json({}, 403)
@@ -259,37 +260,38 @@ app.delete('/api/sessions/:secret/:sid', async (c) => {
   if (c.env.WEB_HOOK?.length) {
     await sendWebHook(c.env.WEB_HOOK, `session end ${sid}`)
   }
-  await delSessionSecret(c.env.KVASA, sid)
+  await delStreamSecret(c, sid)
+  await delStreamSubs(c, sid)
   console.log(`del stream session ${sid}`)
   return c.json({}, 200)
 })
 
 // api play session
 app.post('/api/sessions/:sid', async (c) => {
-  const whipSid = c.req.param('sid')
-  const sessionStat = await getSessionStatus(c, whipSid)
+  const streamSid = c.req.param('sid')
+  const sessionStat = await getSessionStatus(c, streamSid)
   if (!sessionStat?.tracks?.length && !sessionStat?.datachannels?.length) {
     return c.text('session not found', 404)
   }
   // use offer to create recvonly track
   const playerSdp = await c.req.text()
-  const request = createTracksRequest(playerSdp, sessionStat.tracks, whipSid)
+  const request = createTracksRequest(playerSdp, sessionStat.tracks, streamSid)
 
   // create new sub session
   const session = await newSession(c)
-  const sid = session.sessionId
+  const playerSid = session.sessionId
 
-  const res = await rtcApi(c, `/sessions/${sid}/tracks/new`, {
+  const res = await rtcApi(c, `/sessions/${playerSid}/tracks/new`, {
     method: 'POST',
     body: JSON.stringify(request)
   })
   const joinRes = await res.json() as TracksResponse
-  console.log(`new play session ${sid}`)
+  console.log(`new play session ${playerSid}`)
 
   // save new sub to session
-  await putSessionSubs(c.env.KVASA, whipSid, sid)
+  await putStreamSubs(c, streamSid, playerSid)
 
-  c.header('Location', `sessions/sub/${sid}`)
+  c.header('Location', `sessions/sub/${playerSid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
   return c.text(joinRes.sessionDescription.sdp, 201)
@@ -301,55 +303,11 @@ app.get('/api/sessions/:sid', async (c) => {
   if (!sid?.length || sid === 'null' || sid === 'undefined') {
     return c.json({}, 404)
   }
-  const subs = await getSessionSubs(c.env.KVASA, sid)
+  const subs = await getStreamSubs(c, sid)
   const status = await getSessionStatus(c, sid)
   status.subs = subs.length ? subs : []
   return c.json(status)
 })
-
-// signal room caches
-async function getSignalRoom(kv: KVNamespace, name: string) {
-  const signalStr = await kv.get('signal:' + name)
-  return signalStr ? JSON.parse(signalStr) as SignalRoom : null
-}
-
-async function setSignalRoom(kv: KVNamespace, name: string, signalRoom: SignalRoom) {
-  return await kv.put('signal:' + name, JSON.stringify(signalRoom))
-}
-
-// session name caches
-async function getLiveSession(kv: KVNamespace, name: string) {
-  return await kv.get('live:' + name)
-}
-
-async function setLiveSession(kv: KVNamespace, name: string, sid: string) {
-  return await kv.put('live:' + name, sid, { expirationTtl: 36000 })
-}
-
-// session secret caches
-async function delSessionSecret(kv: KVNamespace, sid: string) {
-  return await kv.delete('secret:' + sid)
-}
-
-async function getSessionSecret(kv: KVNamespace, sid: string) {
-  return await kv.get('secret:' + sid)
-}
-
-async function putSessionSecret(kv: KVNamespace, sid: string, secret: string) {
-  await kv.put('secret:' + sid, secret, { expirationTtl: 36000 })
-}
-
-// session subs cache
-async function getSessionSubs(kv: KVNamespace, sid: string): Promise<string[]> {
-  // limit 20
-  const subs = await kv.list({ prefix: `subs:${sid}`, limit: 20 })
-  return subs.keys.map(k => k.name.split(':')[2])
-}
-
-async function putSessionSubs(kv: KVNamespace, sid: string, subSid: string) {
-  // TODO support multiple subs, maybe use kv.list with key prefix
-  await kv.put(`subs:${sid}:${subSid}`, subSid, { expirationTtl: 3600 })
-}
 
 // session utils
 async function newSession(c: Context, offer?: SessionDescription) {
