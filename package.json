@@ -13,6 +13,7 @@
   "dependencies": {
     "@eyevinn/webrtc-player": "^0.13.0",
     "@eyevinn/whip-web-client": "^1.1.6",
+    "@supabase/supabase-js": "^2.58.0",
     "hono": "4.9.8",
     "qrcode": "1.5.4",
     "react": "19.0.0",

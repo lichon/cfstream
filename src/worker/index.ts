@@ -1,4 +1,8 @@
 import { Hono, Context } from 'hono'
+import {
+  setSignal, getSignal, SignalRoom
+  setStreamRoom, getStreamRoom
+} from './supabase'
 
 type Bindings = {
   KVASA: KVNamespace
@@ -54,18 +58,6 @@ interface SessionStatus {
 interface PatchRequest {
   dataChannels?: DataChannel[]
   tracks?: Track[]
-}
-
-interface LiveRoom {
-  name: string
-  secret: string
-  sid: string
-}
-
-interface SignalRoom {
-  sid: string
-  offer: string
-  answer: string
 }
 
 // Add this helper function at the top of the file after the imports
@@ -132,7 +124,7 @@ app.post('/api/signals/:name', async (c) => {
     return c.json({}, 400)
   }
   const signalRoom = await c.req.json() as SignalRoom
-  await setSignalRoom(c.env.KVASA, name, signalRoom)
+  await setSignal(c, signalRoom)
   return c.json({}, 200)
 })
 
@@ -142,7 +134,7 @@ app.get('/api/signals/:name', async (c) => {
   if (!name?.length || name === 'null' || name === 'undefined') {
     return c.json({}, 404)
   }
-  const room = await getSignalRoom(c.env.KVASA, name)
+  const room = await getSignal(c, name)
   return room ? c.json(room, 200) : c.json({}, 404)
 })
 
@@ -152,9 +144,9 @@ app.post('/api/rooms/:name', async (c) => {
   if (!name?.length || name === 'null' || name === 'undefined') {
     return c.text('invalid room', 404)
   }
-  const liveRoom = await c.req.json() as LiveRoom
-  await setLiveSession(c.env.KVASA, name, liveRoom.sid)
-  return c.json({}, 200)
+  const room = await c.req.json()
+  const ok = await setStreamRoom(c, name, room.sid)
+  return c.json({}, ok ? 200 : 500)
 })
 
 // api get room info
@@ -163,7 +155,7 @@ app.get('/api/rooms/:name', async (c) => {
   if (!name?.length || name === 'null' || name === 'undefined') {
     return c.text('invalid room', 404)
   }
-  const sid = await getLiveSession(c.env.KVASA, name)
+  const sid = await getStreamRoom(c, name)
   return sid?.length ? c.text(sid, 200) : c.text('room not found', 404)
 })
 
