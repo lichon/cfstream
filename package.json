@@ -1,5 +1,5 @@
 {
-  "name": "whip-demo",
+  "name": "cfstream",
   "description": "A React application with Vite, Hono, and Cloudflare Workers",
   "version": "0.0.0",
   "cloudflare": {

@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "whip-demo",
+	"name": "cfstream",
 	"main": "./src/worker/index.ts",
 	"compatibility_date": "2025-04-01",
 	"compatibility_flags": [
@@ -20,7 +20,7 @@
 		"ENV": "dev"
 	},
 	"assets": {
-		"directory": "./src/",
+		"directory": "./dist/client",
 		"not_found_handling": "none"
 	}
 }
