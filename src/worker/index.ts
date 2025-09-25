@@ -68,14 +68,6 @@ interface SignalRoom {
   answer: string
 }
 
-const randomUUID = () => {
-  const array = new Uint8Array(16)
-  crypto.getRandomValues(array)
-  array[6] = (array[6] & 0x0f) | 0x40 // Version 4
-  array[8] = (array[8] & 0x3f) | 0x80 // Variant 10
-  return [...array].map((b, i) => (i === 4 || i === 6 || i === 8 || i === 10 ? '-' : '') + b.toString(16).padStart(2, '0')).join('')
-}
-
 // Add this helper function at the top of the file after the imports
 const rtcApi = (c: Context, url: string, init?: RequestInit) => {
   return fetch(`${c.env.RTC_API_URL}${url}`, {
@@ -131,7 +123,7 @@ app.get('/', async (c) => {
   return c.text('hello world')
 })
 
-app.get('/api', (c) => c.text(randomUUID()))
+app.get('/api', (c) => c.text(crypto.randomUUID()))
 
 // api create signal room
 app.post('/api/signals/:name', async (c) => {
@@ -210,7 +202,7 @@ app.post('/api/sessions', async (c) => {
   }
 
   // create session secret
-  const secret = randomUUID()
+  const secret = crypto.randomUUID()
   await putSessionSecret(c.env.KVASA, sid, secret)
 
   c.header('Location', `sessions/${secret}/${sid}`)
