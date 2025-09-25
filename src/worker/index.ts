@@ -1,13 +1,12 @@
-import { Hono } from 'hono'
+import { Hono, Context } from 'hono'
 
 type Bindings = {
   KVASA: KVNamespace
   RTC_APP_ID: string
+  RTC_API_URL: string
   RTC_API_TOKEN: string
   WEB_HOOK: string
 }
-
-const RTC_URL = 'https://rtc.live.cloudflare.com/v1/apps/811fa2b2719039f47b80ad3154dca458'
 
 interface NewSessionResponse {
   sessionId: string
@@ -78,13 +77,13 @@ const randomUUID = () => {
 }
 
 // Add this helper function at the top of the file after the imports
-const rtcApi = (token: string, url: string, init?: RequestInit) => {
-  return fetch(RTC_URL + url, {
+const rtcApi = (c: Context, url: string, init?: RequestInit) => {
+  return fetch(`${c.env.RTC_API_URL}${url}`, {
     ...init,
     headers: {
       ...init?.headers,
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${c.env.RTC_API_TOKEN}`,
     },
   })
 }
@@ -188,8 +187,7 @@ app.post('/api/sessions', async (c) => {
     return c.text('invalid request', 400)
   }
 
-  const session = await newSession(c.env.RTC_API_TOKEN,
-    dcOnly ? createTracksRequest(sdp).sessionDescription : undefined)
+  const session = await newSession(c, dcOnly ? createTracksRequest(sdp).sessionDescription : undefined)
   const sid = session.sessionId
 
   console.log(`new ${hasMedia ? 'stream' : 'dc'} session ${sid}`)
@@ -199,7 +197,7 @@ app.post('/api/sessions', async (c) => {
     c.header('Access-Control-Allow-Origin', '*')
     return c.text(session.sessionDescription?.sdp || '')
   }
-  const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
+  const res = await rtcApi(c, `/sessions/${sid}/tracks/new`, {
     method: 'POST',
     body: JSON.stringify(createTracksRequest(sdp))
   }).catch(_ => {
@@ -226,7 +224,7 @@ app.patch('/api/sessions/:sid', async (c) => {
   // TODO check session's secret
   const sid = c.req.param('sid')
   if (c.req.header('Content-Type')?.indexOf('text/plain') != -1) {
-    const sessionStatus = await getSessionStatus(c.env.RTC_API_TOKEN, sid)
+    const sessionStatus = await getSessionStatus(c, sid)
     if (sessionStatus.datachannels?.length || sessionStatus.tracks?.length) {
       return c.text('', 403)
     }
@@ -234,7 +232,7 @@ app.patch('/api/sessions/:sid', async (c) => {
     // const kickBySubSession = c.req.header('X-Sub-Session')
     // this would break the session's ice connection by cf sfu
     const sdp = await c.req.text()
-    const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
+    const res = await rtcApi(c, `/sessions/${sid}/tracks/new`, {
       method: 'POST',
       body: JSON.stringify(createTracksRequest(sdp))
     })
@@ -243,7 +241,7 @@ app.patch('/api/sessions/:sid', async (c) => {
 
   const patch = await c.req.json() as PatchRequest
   if (patch?.dataChannels?.length) {
-    const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/datachannels/new`, {
+    const res = await rtcApi(c, `/sessions/${sid}/datachannels/new`, {
       method: 'POST',
       body: JSON.stringify(patch)
     }).catch(_ => {
@@ -252,7 +250,7 @@ app.patch('/api/sessions/:sid', async (c) => {
     const jsonRes = await res.json()
     return c.json(jsonRes || {})
   } else if (patch?.tracks?.length) {
-    const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
+    const res = await rtcApi(c, `/sessions/${sid}/tracks/new`, {
       method: 'POST',
       body: JSON.stringify(createTracksRequest('', patch.tracks, ))
     }).catch(_ => {
@@ -285,7 +283,7 @@ app.delete('/api/sessions/:secret/:sid', async (c) => {
 // api play session
 app.post('/api/sessions/:sid', async (c) => {
   const whipSid = c.req.param('sid')
-  const sessionStat = await getSessionStatus(c.env.RTC_API_TOKEN, whipSid)
+  const sessionStat = await getSessionStatus(c, whipSid)
   if (!sessionStat?.tracks?.length && !sessionStat?.datachannels?.length) {
     return c.text('session not found', 404)
   }
@@ -294,10 +292,10 @@ app.post('/api/sessions/:sid', async (c) => {
   const request = createTracksRequest(playerSdp, sessionStat.tracks, whipSid)
 
   // create new sub session
-  const session = await newSession(c.env.RTC_API_TOKEN)
+  const session = await newSession(c)
   const sid = session.sessionId
 
-  const res = await rtcApi(c.env.RTC_API_TOKEN, `/sessions/${sid}/tracks/new`, {
+  const res = await rtcApi(c, `/sessions/${sid}/tracks/new`, {
     method: 'POST',
     body: JSON.stringify(request)
   })
@@ -320,7 +318,7 @@ app.get('/api/sessions/:sid', async (c) => {
     return c.json({}, 404)
   }
   const subs = await getSessionSubs(c.env.KVASA, sid)
-  const status = await getSessionStatus(c.env.RTC_API_TOKEN, sid)
+  const status = await getSessionStatus(c, sid)
   status.subs = subs.length ? subs : []
   return c.json(status)
 })
@@ -370,16 +368,16 @@ async function putSessionSubs(kv: KVNamespace, sid: string, subSid: string) {
 }
 
 // session utils
-async function newSession(token: string, offer?: SessionDescription) {
-  const res = await rtcApi(token, `/sessions/new`, {
+async function newSession(c: Context, offer?: SessionDescription) {
+  const res = await rtcApi(c, `/sessions/new`, {
     method: 'POST',
     body: offer ? JSON.stringify({ sessionDescription: offer }) : undefined
   })
   return await res.json() as NewSessionResponse
 }
 
-async function getSessionStatus(token: string, sid: string) {
-  const res = await rtcApi(token, `/sessions/${sid}`, {
+async function getSessionStatus(c: Context, sid: string) {
+  const res = await rtcApi(c, `/sessions/${sid}`, {
     method: 'GET',
   })
   return await res.json() as SessionStatus
