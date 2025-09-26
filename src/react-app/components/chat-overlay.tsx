@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 export interface ChatMessage {
-  text: string;
+  content: string;
   timestamp: string;
   sender: string;
 }
@@ -9,10 +9,10 @@ export interface ChatMessage {
 interface ChatOverlayProps {
   show: boolean;
   messages: ChatMessage[];
-  onSend: (message: string) => void;
+  onSubmit: (message: string) => void;
 }
 
-export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend }) => {
+export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSubmit: onSend }) => {
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,7 +75,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSend
                 <span style={{ opacity: 0.7, fontSize: '12px' }}>
                   {new Date(msg.timestamp).toLocaleTimeString()} - {msg.sender}:{' '}
                 </span>
-                <span style={{ color: '#fff' }}>{msg.text}</span>
+                <span style={{ color: '#fff' }}>{msg.content}</span>
               </div>
             ))}
             <div ref={messagesEndRef} />

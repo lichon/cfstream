@@ -4,7 +4,8 @@ import { useMemo, useState, useEffect } from 'react'
 import './App.css'
 
 import { getConfig } from './config'
-import { useWakeLock } from './hooks/wake-lock'
+import { useWakeLock } from './hooks/use-wakelock'
+import { useSupabaseChannel } from './hooks/use-supabase'
 
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
@@ -49,6 +50,13 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(false)
   const [isScreenShare, setScreenShare] = useState(false)
+
+  const { sendChannelMessage, isChannelConnected } = useSupabaseChannel({
+    roomName: roomParam ?? nameParam ?? '',
+    onChatMessage: (msg) => {
+      addChatMessage(msg.content, msg.sender)
+    }
+  })
 
   function viteTTS() {
     if (import.meta.hot) {
@@ -189,9 +197,13 @@ function App() {
     }
   }
 
-  function sendChatMessage(text: string) {
+  function onTextSubmit(text: string) {
     if (chatCmdList.has(text)) {
       handleCmd(text)
+      return
+    }
+    if (isChannelConnected) {
+      sendChannelMessage(text)
       return
     }
     const msgObject = SignalPeer.newChatMsg(text)
@@ -223,7 +235,7 @@ function App() {
     }
     setChatMessages(prev => {
       const msgs = [...prev, {
-        text: text,
+        content: text,
         timestamp: new Date().toISOString(),
         sender: sender ?? SYSTEM_LOG
       }]
@@ -259,7 +271,7 @@ function App() {
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
       videoElement: getVideoElement(),
-      onChatMessage: (message, from) => {
+      onChatMessage: (message: string, from?: string) => {
         addChatMessage(message, from)
       },
       onOpen: (sid) => {
@@ -378,7 +390,7 @@ function App() {
       <ChatOverlay
         show={chatVisible}
         messages={chatMessages}
-        onSend={(text) => sendChatMessage(text)}
+        onSubmit={(text) => onTextSubmit(text)}
       />
       <QROverlay
         url={`${getPlayerUrl(streamSession, roomParam || nameParam)}`}
