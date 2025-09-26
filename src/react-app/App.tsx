@@ -218,7 +218,7 @@ function App() {
     } else {
       const isSelfMsg = sender == selfDisplayName
       if (ttsEnabled && !isSelfMsg) {
-        ttsPlayer.speak(text, { rate: 2 })
+        ttsPlayer.speak(text, { rate: 1.6 })
       }
     }
     setChatMessages(prev => {
