@@ -45,6 +45,7 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
     return () => {
       supabase.removeChannel(newChannel)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const sendChannelMessage = useCallback(
@@ -53,6 +54,7 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
 
       const message: ChatMessage = {
         content,
+        sender: 'nickname',
         timestamp: new Date().toISOString(),
       }
 

@@ -4,6 +4,7 @@ import {
   setStreamRoom, getStreamRoom,
   setStreamSecret, getStreamSecret, delStreamSecret,
   getStreamSubs, putStreamSubs, delStreamSubs,
+  sendChannelMessage,
 } from './supabase'
 
 type Bindings = {
@@ -139,7 +140,7 @@ app.get('/api/signals/:name', async (c) => {
   return room ? c.json(room, 200) : c.json({}, 404)
 })
 
-// api create live room
+// api create stream room
 app.post('/api/rooms/:name', async (c) => {
   const name = c.req.param('name')
   if (!name?.length || name === 'null' || name === 'undefined') {
@@ -158,6 +159,16 @@ app.get('/api/rooms/:name', async (c) => {
   }
   const sid = await getStreamRoom(c, name)
   return sid?.length ? c.text(sid, 200) : c.text('room not found', 404)
+})
+
+app.post('/api/rooms/:name/message', async (c) => {
+  const name = c.req.param('name')
+  if (!name?.length || name === 'null' || name === 'undefined') {
+    return c.text('invalid room', 404)
+  }
+  const msg = await c.req.json()
+  const ok = await sendChannelMessage(c, name, msg.content)
+  return c.json({}, ok ? 200 : 500)
 })
 
 // api create session

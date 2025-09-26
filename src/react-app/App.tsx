@@ -58,23 +58,11 @@ function App() {
     }
   })
 
-  function viteTTS() {
-    if (import.meta.hot) {
-      import.meta.hot.on('custom:tts', (data: string) => {
-        ttsPlayer.speak(data, {
-          rate: 2.0,
-          sinkId: ttsPlayer.displayMedia ? 'communications' : undefined,
-        })
-      })
-    }
-  }
-
   useEffect(() => {
     if (_firstLoad) {
       _firstLoad = false
       help()
       startPlayer()
-      viteTTS()
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -230,7 +218,7 @@ function App() {
     } else {
       const isSelfMsg = sender == selfDisplayName
       if (ttsEnabled && !isSelfMsg) {
-        ttsPlayer.speak(text, { rate: 3 })
+        ttsPlayer.speak(text, { rate: 2 })
       }
     }
     setChatMessages(prev => {
@@ -351,7 +339,7 @@ function App() {
       </div>
 
       <div className='video-wrapper'>
-        <video id='video' autoPlay muted playsInline
+        <video id='video' autoPlay playsInline
           // Add reference for Safari PiP API
           ref={(video) => {
             if (video) {

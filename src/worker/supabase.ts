@@ -13,7 +13,6 @@ function getSupabase(c: Context) {
   })
 }
 
-
 export async function getSignal(c: Context, id: string): Promise<SignalRoom | null> {
   const { data, error } = await getSupabase(c)
     .from('rooms')
@@ -25,7 +24,6 @@ export async function getSignal(c: Context, id: string): Promise<SignalRoom | nu
     console.error('Error fetching signal room:', error)
     return null
   }
-
   return data as SignalRoom
 }
 
@@ -38,7 +36,6 @@ export async function setSignal(c: Context, signal: SignalRoom): Promise<boolean
     console.error('Error setting signal room:', error)
     return false
   }
-
   return true
 }
 
@@ -53,7 +50,6 @@ export async function getStreamRoom(c: Context, name: string): Promise<string | 
     console.error('Error fetching stream room:', error)
     return null
   }
-
   return data.stream_id
 }
 
@@ -66,7 +62,6 @@ export async function setStreamRoom(c: Context, name: string, stream_id: string)
     console.error('Error setting stream room:', error)
     return false
   }
-
   return true
 }
 
@@ -81,7 +76,6 @@ export async function getStreamSecret(c: Context, sid: string): Promise<string |
     console.error('Error fetching stream secret:', error)
     return null
   }
-
   return data.secret
 }
 
@@ -94,7 +88,6 @@ export async function setStreamSecret(c: Context, sid: string, secret: string): 
     console.error('Error setting stream secret:', error)
     return false
   }
-
   return true
 }
 
@@ -108,7 +101,6 @@ export async function delStreamSecret(c: Context, sid: string): Promise<boolean>
     console.error('Error deleting stream secret:', error)
     return false
   }
-
   return true
 }
 
@@ -123,7 +115,6 @@ export async function getStreamSubs(c: Context, sid: string): Promise<Array<stri
     console.error('Error fetching stream subs:', error)
     return []
   }
-
   return data.map(x => x.sub_sid)
 }
 
@@ -136,7 +127,6 @@ export async function putStreamSubs(c: Context, sid: string, sub_sid: string): P
     console.error('Error putting stream sub:', error)
     return false
   }
-
   return true
 }
 
@@ -150,6 +140,22 @@ export async function delStreamSubs(c: Context, sid: string): Promise<boolean> {
     console.error('Error deleting stream secret:', error)
     return false
   }
+  return true
+}
 
+export async function sendChannelMessage(c: Context, room: string, content: string): Promise<boolean> {
+  if (!room?.length || !content?.length) {
+    return false
+  }
+  const channel = getSupabase(c).channel(`room:${room}:messages`)
+  await channel.send({
+    type: 'broadcast',
+    event: 'message',
+    payload: {
+      content,
+      sender: 'channel',
+      timestamp: new Date().toISOString(),
+    },
+  })
   return true
 }
