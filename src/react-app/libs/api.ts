@@ -37,13 +37,13 @@ export interface NewSessionResponse {
 }
 
 export function getSessionUrl(sid?: string | null): string {
-  const apiHost = import.meta.env.VITE_API_HOST || window.location.host
+  const apiHost = window.location.host
   const protocol = window.location.protocol
   return `${protocol}//${apiHost}${SESSION_API}` + (sid ? `/${sid}` : '')
 }
 
 export function getPlayerUrl(sid?: string, name?: string): string {
-  const playerHost = import.meta.env.VITE_PLAYER_HOST || window.location.host
+  const playerHost = window.location.host
   const protocol = window.location.protocol
   if (name?.length)
     return `${protocol}//${playerHost}?name=${name}`

@@ -10,9 +10,6 @@ export interface AppConfig {
     sessionUrl: string
     stunServers: IceServer[]
   }
-  player: {
-    host: string
-  }
   stream: {
     broadcastInterval: number
     jitterBufferTarget: number
@@ -35,13 +32,10 @@ export interface AppConfig {
 
 const defaultConfig: AppConfig = {
   api: {
-    host: import.meta.env.VITE_API_HOST || window.location.host,
+    host: window.location.host,
     roomUrl: '/api/rooms',
     sessionUrl: '/api/sessions',
     stunServers: [{ urls: 'stun:stun.cloudflare.com:3478' }]
-  },
-  player: {
-    host: import.meta.env.VITE_PLAYER_HOST || window.location.host,
   },
   stream: {
     broadcastInterval: 5000,
