@@ -301,13 +301,13 @@ function App() {
                 onClick={() => startStream(false)}
                 className='hover-menu-item'
               >
-                Start with Camera
+                Start Camera
               </button>
               <button
                 onClick={() => startStream(true)}
                 className='hover-menu-item'
               >
-                Start Screen Share
+                Start Screen
               </button>
             </div>
           )}
