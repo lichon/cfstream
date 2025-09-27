@@ -93,6 +93,7 @@ export class ChromeTTS {
     const tmpInput = document.createElement('input')
     // Set attributes for the input element (optional)
     tmpInput.setAttribute('type', 'text')
+    tmpInput.setAttribute('maxLength', '144')
 
     // Set styles for the input element
     tmpInput.style.width = '100%'

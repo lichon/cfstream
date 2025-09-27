@@ -83,6 +83,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSubm
           <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
             <input
               ref={inputRef}
+              maxLength={144}
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
