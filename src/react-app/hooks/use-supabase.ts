@@ -26,7 +26,7 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
       return
     }
     const newChannel = supabase.channel(`room:${roomName}:messages`, {
-      config: { private: false }
+      config: { broadcast: { self: true }, private: false }
     })
 
     newChannel

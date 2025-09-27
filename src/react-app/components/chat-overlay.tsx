@@ -109,6 +109,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSubm
                 color: 'white',
                 cursor: 'pointer',
               }}
+              onClick={() => inputRef.current?.focus()}
             >
               Send
             </button>

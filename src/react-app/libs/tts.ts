@@ -1,3 +1,5 @@
+const default_speak_rate = 1.6
+
 interface TTSOptions {
   voice?: number;
   rate?: number;
@@ -48,7 +50,7 @@ export class ChromeTTS {
     if (this.voices.length > 0) {
       utterance.voice = this.voices[0];
     }
-    utterance.rate = 1;
+    utterance.rate = default_speak_rate;
     utterance.pitch = 1;
 
     if (options.voice !== undefined && this.voices[options.voice]) {
@@ -76,13 +78,14 @@ export class ChromeTTS {
     this.mediaStream?.getTracks().forEach(track => track.stop());
   }
 
-  public async pipInput(redirectSound = false) {
+  public async pipInput(redirectSound = false, onSubmit?: (txt: string) => void) {
     // eslint-disable-next-line
     const pipWindow = await (window as any).documentPictureInPicture?.requestWindow()
     if (!pipWindow) return
     pipWindow.addEventListener('pagehide', () => {
       this.releaseDisplayMedia()
     })
+    // request display audio
     if (redirectSound) {
       this.requestDisplayMedia()
     }
@@ -105,8 +108,11 @@ export class ChromeTTS {
 
         tmpInput.value = ''
         tmpInput.focus()
+        if (onSubmit) {
+          onSubmit(txt)
+          return
+        }
         this.speak(txt, {
-          rate: 2.0,
           sinkId: redirectSound ? 'communications' : undefined,
         })
       }

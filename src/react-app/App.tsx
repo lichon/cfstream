@@ -28,7 +28,7 @@ const openLinkOnShare = getConfig().ui.openLinkOnShare
 const isMoblie = getConfig().ui.isMobilePlatform
 const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
-const ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
+let ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
 let debugEnabled = getConfig().debug
 
 function getVideoElement() {
@@ -165,9 +165,14 @@ function App() {
         v.requestPictureInPicture()
         break
       case '/tts':
-        if (ttsEnabled) ttsPlayer.pipInput()
+        ttsEnabled = !ttsEnabled && ChromeTTS.isSupported()
+        addChatMessage(`tts enabled ${ttsEnabled}`)
         break
-      case '/rtts':
+      case '/input':
+        ttsPlayer.pipInput(false, onTextSubmit)
+        break
+      case '/rinput':
+        // request display sound, and redirect to certain audio device
         if (ttsEnabled) ttsPlayer.pipInput(true)
         break
       case '/vu':
@@ -218,7 +223,7 @@ function App() {
     } else {
       const isSelfMsg = sender == selfDisplayName
       if (ttsEnabled && !isSelfMsg) {
-        ttsPlayer.speak(text, { rate: 1.6 })
+        ttsPlayer.speak(text)
       }
     }
     setChatMessages(prev => {
