@@ -2,10 +2,11 @@ import { WHIPClient } from '@eyevinn/whip-web-client'
 import { SignalPeer } from './signalpeer'
 import {
   requestDataChannel,
-  setSessionByName,
+  setSessionName,
   getSessionInfo,
   getSessionUrl,
-  extractSessionIdFromUrl
+  extractSessionIdFromUrl,
+  extractSessionSecretIdFromUrl
 } from './api'
 
 import { getConfig } from '../config'
@@ -146,8 +147,9 @@ export class WHIPStreamer {
     await this.client.setIceServersFromEndpoint()
     await this.client.ingest(mediaStream)
     this.config.videoElement.srcObject = mediaStream
-    this.streamerSid = extractSessionIdFromUrl(await this.client.getResourceUrl() || '')
-    this.setSessionName(this.streamerSid!, this.config.sessionName)
+    const [secret, sid] = extractSessionSecretIdFromUrl(await this.client.getResourceUrl() || '')
+    this.streamerSid = sid
+    this.setSessionName(sid, this.config.sessionName, secret)
   }
 
   async stop() {
@@ -162,12 +164,12 @@ export class WHIPStreamer {
     }
   }
 
-  private async setSessionName(sid: string, nameParam?: string) {
-    if (!nameParam?.length)
+  private async setSessionName(sid: string, name?: string, secret?: string) {
+    if (!name?.length || !secret?.length)
       return
-    const res = await setSessionByName(nameParam, sid)
+    const res = await setSessionName(sid, name, secret)
     if (res.status == 200) {
-      this.config.onChatMessage?.(`set room ${nameParam} session to ${sid}`)
+      this.config.onChatMessage?.(`set room ${name} session to ${sid}`)
     }
   }
 

@@ -1,8 +1,7 @@
 import { Hono, Context } from 'hono'
 import {
   setSignal, getSignal, SignalRoom,
-  setStreamRoom, getStreamRoom,
-  setStreamSecret, getStreamSecret, delStreamSecret,
+  delStreamRoom, newStreamRoom, getStreamRoom,
   getStreamSubs, putStreamSubs, delStreamSubs,
   sendChannelMessage,
 } from './supabase'
@@ -140,27 +139,33 @@ app.get('/api/signals/:name', async (c) => {
   return room ? c.json(room, 200) : c.json({}, 404)
 })
 
-// api create stream room
-app.post('/api/rooms/:name', async (c) => {
-  const name = c.req.param('name')
-  if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.text('invalid room', 404)
+// update stream room's name
+app.post('/api/rooms', async (c) => {
+  const reqRoom = await c.req.json()
+  if (!reqRoom?.name || !reqRoom?.id || !reqRoom?.secret) {
+    return c.text('invalid request', 400)
   }
-  const room = await c.req.json()
-  const ok = await setStreamRoom(c, name, room.sid)
+  const room = await getStreamRoom(c, reqRoom.id)
+  // check secret for room
+  if (room?.secret !== reqRoom?.secret) {
+    return c.json({}, 403)
+  }
+
+  const ok = await newStreamRoom(c, { ...reqRoom })
   return c.json({}, ok ? 200 : 500)
 })
 
-// api get room info
+// api get room id by name
 app.get('/api/rooms/:name', async (c) => {
   const name = c.req.param('name')
   if (!name?.length || name === 'null' || name === 'undefined') {
     return c.text('invalid room', 404)
   }
-  const sid = await getStreamRoom(c, name)
-  return sid?.length ? c.text(sid, 200) : c.text('room not found', 404)
+  const room = await getStreamRoom(c, name)
+  return room ? c.text(room.id, 200) : c.text('room not found', 404)
 })
 
+// post message to room
 app.post('/api/rooms/:name/message', async (c) => {
   const name = c.req.param('name')
   if (!name?.length || name === 'null' || name === 'undefined') {
@@ -207,12 +212,16 @@ app.post('/api/sessions', async (c) => {
 
   // create session secret
   const secret = crypto.randomUUID()
-  await setStreamSecret(c, sid, secret)
+  const succ = await newStreamRoom(c, {
+    id: sid,
+    name: sid,
+    secret: secret
+  })
 
   c.header('Location', `sessions/${secret}/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
-  return c.text(tracksRes.sessionDescription?.sdp || '')
+  return succ ? c.text(tracksRes.sessionDescription?.sdp || '') : c.text('create failed', 500)
 })
 
 // api patch session, bind dc to session
@@ -262,16 +271,16 @@ app.patch('/api/sessions/:sid', async (c) => {
 app.delete('/api/sessions/:secret/:sid', async (c) => {
   const sid = c.req.param('sid')
   const secret = c.req.param('secret')
-  const sessionSecret = await getStreamSecret(c, sid)
+  const room = await getStreamRoom(c, sid)
   // check secret for session
-  if (!sid || secret !== sessionSecret) {
+  if (!sid || secret !== room?.secret) {
     return c.json({}, 403)
   }
 
   if (c.env.WEB_HOOK?.length) {
     await sendWebHook(c.env.WEB_HOOK, `session end ${sid}`)
   }
-  await delStreamSecret(c, sid)
+  await delStreamRoom(c, sid)
   await delStreamSubs(c, sid)
   console.log(`del stream session ${sid}`)
   return c.json({}, 200)

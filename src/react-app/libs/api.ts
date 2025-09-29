@@ -51,7 +51,17 @@ export function getPlayerUrl(sid?: string, name?: string): string {
 }
 
 export function extractSessionIdFromUrl(url: string | null): string | undefined {
-  return url ? url.split('/').pop() : undefined;
+  return url ? url.split('/').pop() : undefined
+}
+
+export function extractSessionSecretIdFromUrl(url: string | null): string[] {
+  if (url?.length) {
+    const tmp = url.split('/')
+    const sid = tmp.pop()
+    const secret = tmp.pop()
+    return [secret!, sid!]
+  }
+  return []
 }
 
 export async function createSession(offerSdp: string | undefined): Promise<NewSessionResponse | null> {
@@ -97,10 +107,10 @@ export async function getSessionInfo(sid: string): Promise<SessionStatus> {
   return res.json()
 }
 
-export async function setSessionByName(name: string, sid: string) {
-  const res = await fetch(`${ROOM_API}/${name}`, {
+export async function setSessionName(sid: string, name: string, secret: string) {
+  const res = await fetch(`${ROOM_API}`, {
     method: 'POST',
-    body: JSON.stringify({ name: name, sid: sid, })
+    body: JSON.stringify({ id: sid, name, secret })
   })
   return res
 }
