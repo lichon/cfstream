@@ -45,7 +45,21 @@ export async function setSignal(c: Context, signal: SignalRoom): Promise<boolean
   return true
 }
 
-export async function getStreamRoom(c: Context, name: string): Promise<StreamRoom | null> {
+export async function getStreamRoom(c: Context, sid: string): Promise<StreamRoom | null> {
+  const { data, error } = await getSupabase(c)
+    .from('stream_rooms')
+    .select('*')
+    .eq('id', sid)
+    .single()
+
+  if (error) {
+    console.error('Error fetching stream room:', error)
+    return null
+  }
+  return data as StreamRoom
+}
+
+export async function getStreamRoomByName(c: Context, name: string): Promise<StreamRoom | null> {
   const { data, error } = await getSupabase(c)
     .from('stream_rooms')
     .select('*')
@@ -71,11 +85,11 @@ export async function newStreamRoom(c: Context, streamRoom: StreamRoom): Promise
   return true
 }
 
-export async function delStreamRoom(c: Context, name: string): Promise<boolean> {
+export async function delStreamRoom(c: Context, sid: string): Promise<boolean> {
   const { error } = await getSupabase(c)
     .from('stream_rooms')
     .delete()
-    .eq('name', name)
+    .eq('id', sid)
 
   if (error) {
     console.error('Error setting stream room:', error)
@@ -112,12 +126,12 @@ export async function putStreamSubs(c: Context, sid: string, sub_sid: string): P
 
 export async function delStreamSubs(c: Context, sid: string): Promise<boolean> {
   const { error } = await getSupabase(c)
-    .from('subs')
+    .from('stream_subs')
     .delete()
     .eq('id', sid)
 
   if (error) {
-    console.error('Error deleting stream secret:', error)
+    console.error('Error deleting stream subs:', error)
     return false
   }
   return true

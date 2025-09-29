@@ -1,7 +1,7 @@
 import { Hono, Context } from 'hono'
 import {
   setSignal, getSignal, SignalRoom,
-  delStreamRoom, newStreamRoom, getStreamRoom,
+  delStreamRoom, newStreamRoom, getStreamRoom, getStreamRoomByName,
   getStreamSubs, putStreamSubs, delStreamSubs,
   sendChannelMessage,
 } from './supabase'
@@ -161,7 +161,7 @@ app.get('/api/rooms/:name', async (c) => {
   if (!name?.length || name === 'null' || name === 'undefined') {
     return c.text('invalid room', 404)
   }
-  const room = await getStreamRoom(c, name)
+  const room = await getStreamRoomByName(c, name)
   return room ? c.text(room.id, 200) : c.text('room not found', 404)
 })
 
