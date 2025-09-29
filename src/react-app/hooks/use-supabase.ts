@@ -4,6 +4,7 @@ import { createClient } from '../libs/supabase'
 import { useCallback, useEffect, useState } from 'react'
 
 export interface ChatMessage {
+  id?: string
   content: string
   timestamp: string
   sender?: string
@@ -16,6 +17,7 @@ interface ChannelConfig {
 
 const EVENT_MESSAGE_TYPE = 'message'
 const supabase = createClient()
+const recentMessages: string[] = []
 
 export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
   const [channel, setChannel] = useState<ReturnType<typeof supabase.channel> | null>(null)
@@ -30,13 +32,18 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
     })
 
     newChannel
-      .on('broadcast', { event: EVENT_MESSAGE_TYPE }, (payload) => {
-        onChatMessage?.(payload.payload as ChatMessage)
+      .on('broadcast', { event: EVENT_MESSAGE_TYPE }, (msg) => {
+        if (recentMessages.includes(msg.payload.id)) {
+          msg.payload.sender = 'You'
+        }
+        onChatMessage?.(msg.payload as ChatMessage)
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           onChatMessage?.({ content: `channel connected ${roomName}`, timestamp: new Date().toISOString() })
           setIsConnected(true)
+        } else {
+          setIsConnected(false)
         }
       })
 
@@ -52,7 +59,13 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
     async (content: string) => {
       if (!channel || !isChannelConnected) return
 
+      const newMsgId = crypto.randomUUID()
+      recentMessages.unshift(newMsgId)
+      if (recentMessages.length > 10) {
+        recentMessages.pop()
+      }
       const message: ChatMessage = {
+        id: newMsgId,
         content,
         sender: 'nickname',
         timestamp: new Date().toISOString(),
