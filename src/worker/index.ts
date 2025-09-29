@@ -10,6 +10,7 @@ type Bindings = {
   RTC_APP_ID: string
   RTC_API_URL: string
   RTC_API_TOKEN: string
+  SUPABASE_URL: string
   WEB_HOOK: string
 }
 
@@ -112,8 +113,19 @@ const sendWebHook = async (hookURL: string, message: string) => {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-app.get('/', async (c) => {
-  return c.text('hello world')
+app.all('/supa/*', async (c) => {
+  const supaUrl = new URL(c.env.SUPABASE_URL)
+  const targetURL = new URL(c.req.url);
+  targetURL.protocol = supaUrl.protocol
+  targetURL.host = supaUrl.host
+  targetURL.port = supaUrl.port
+  targetURL.pathname = targetURL.pathname.substring(5);
+  const newRequest = new Request(targetURL, {
+    method: c.req.method,
+    headers: c.req.raw.headers,
+    body: c.req.raw.body
+  });
+  return fetch(newRequest)
 })
 
 app.get('/api', (c) => c.text(crypto.randomUUID()))
