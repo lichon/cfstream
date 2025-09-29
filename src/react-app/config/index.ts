@@ -25,7 +25,6 @@ export interface AppConfig {
     openLinkOnShare: boolean
     isMobilePlatform: boolean
     cmdList: Set<string>
-    rpcList: Set<string>
   }
   debug: boolean
 }
@@ -74,7 +73,6 @@ const defaultConfig: AppConfig = {
       '/volumeDown',
       '/vd',
     ]),
-    rpcList: new Set<string>(['fetch', 'tts']),
   },
   debug: import.meta.env.DEV
 }
