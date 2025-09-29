@@ -9,7 +9,7 @@ export interface SignalRoom {
 
 function getSupabase(c: Context) {
   return createClient(c.env.SUPABASE_URL, c.env.SUPABASE_KEY, {
-    db: { schema: 'cfstream' }
+    db: { schema: 'public' }
   })
 }
 

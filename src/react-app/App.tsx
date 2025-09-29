@@ -237,6 +237,10 @@ function App() {
   }
 
   async function switchMedia() {
+    if (whepPlayer) {
+      handleCmd('/mute')
+      return
+    }
     setIsFrontCamera(!isFrontCamera)
     setScreenShare(!isScreenShare)
     whipStreamer?.switchMedia(!isScreenShare, !isFrontCamera)
@@ -344,7 +348,7 @@ function App() {
       </div>
 
       <div className='video-wrapper'>
-        <video id='video' autoPlay playsInline
+        <video id='video' muted autoPlay playsInline
           // Add reference for Safari PiP API
           ref={(video) => {
             if (video) {
