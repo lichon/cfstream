@@ -64,6 +64,7 @@ export async function getStreamRoomByName(c: Context, name: string): Promise<Str
     .from('stream_rooms')
     .select('*')
     .eq('name', name)
+    .order('create_at', { ascending: false })
     .single()
 
   if (error) {

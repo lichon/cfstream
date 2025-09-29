@@ -169,7 +169,7 @@ export class WHIPStreamer {
       return
     const res = await setSessionName(sid, name, secret)
     if (res.status == 200) {
-      this.config.onChatMessage?.(`set room ${name} session to ${sid}`)
+      this.config.onChatMessage?.(`set session ${sid} name to ${name}`)
     }
   }
 
