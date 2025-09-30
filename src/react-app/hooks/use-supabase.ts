@@ -39,11 +39,9 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
         onChatMessage?.(msg.payload as ChatMessage)
       })
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
+        if (status === 'SUBSCRIBED' && !isChannelConnected) {
           onChatMessage?.({ content: `channel connected ${roomName}`, timestamp: new Date().toISOString() })
           setIsConnected(true)
-        } else {
-          setIsConnected(false)
         }
       })
 

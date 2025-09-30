@@ -113,6 +113,9 @@ const sendWebHook = async (hookURL: string, message: string) => {
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+app.get('/api', (c) => c.text(crypto.randomUUID()))
+
+// supabase proxy
 app.all('/supa/*', async (c) => {
   const supaUrl = new URL(c.env.SUPABASE_URL)
   const targetURL = new URL(c.req.url);
@@ -127,8 +130,6 @@ app.all('/supa/*', async (c) => {
   });
   return fetch(newRequest)
 })
-
-app.get('/api', (c) => c.text(crypto.randomUUID()))
 
 // api create signal room
 app.post('/api/signals/:name', async (c) => {
