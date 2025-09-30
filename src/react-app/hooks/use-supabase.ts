@@ -39,8 +39,7 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
         onChatMessage?.(msg.payload as ChatMessage)
       })
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED' && !isChannelConnected) {
-          onChatMessage?.({ content: `channel connected ${roomName}`, timestamp: new Date().toISOString() })
+        if (status === 'SUBSCRIBED') {
           setIsConnected(true)
         }
       })
@@ -52,6 +51,13 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (isChannelConnected) {
+      onChatMessage?.({ content: `channel connected ${roomName}`, timestamp: new Date().toISOString() })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isChannelConnected])
 
   const sendChannelMessage = useCallback(
     async (content: string) => {
