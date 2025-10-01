@@ -234,7 +234,7 @@ function App() {
   }
 
   async function switchMedia() {
-    if (whepPlayer) {
+    if (isPlayer) {
       handleCmd('/mute')
       return
     }
@@ -281,7 +281,7 @@ function App() {
     <>
       <div id='control' className='control'>
         <div className='control-button-container'
-          onMouseEnter={() => setShowHoverMenu(!sidParam?.length && !streamSession)}
+          onMouseEnter={() => setShowHoverMenu(!isPlayer && !streamSession)}
           onMouseLeave={() => setShowHoverMenu(false)}
         >
           <button className='control-bt'
@@ -292,11 +292,11 @@ function App() {
                 stopPlayer()
               } else {
                 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-                sidParam || roomParam ? startPlayer() : setShowHoverMenu(true)
+                isPlayer ? startPlayer() : setShowHoverMenu(true)
               }
             }}
           >
-            {streamSession ? 'Stop' : 'Start'}
+            {streamSession ? 'Stop' : isPlayer ? 'Play' : 'Start'}
           </button>
           {!streamSession && showHoverMenu && (
             <div className='hover-menu'>
@@ -333,7 +333,7 @@ function App() {
           <button className='control-bt'
             onClick={() => { switchMedia() }}
           >
-            Switch Media
+            {isPlayer ? 'Switch Mute' : 'Switch Media'}
           </button>
         </div>
       </div>
