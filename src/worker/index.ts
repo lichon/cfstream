@@ -1,6 +1,5 @@
 import { Hono, Context } from 'hono'
 import {
-  setSignal, getSignal, SignalRoom,
   delStreamRoom, newStreamRoom, getStreamRoom, getStreamRoomByName,
   getStreamSubs, putStreamSubs, delStreamSubs,
   sendChannelMessage,
@@ -98,25 +97,12 @@ function createTracksRequest(sdp?: string, tracks?: Track[], sid?: string): Trac
   } as TracksRequest
 }
 
-const sendWebHook = async (hookURL: string, message: string) => {
-  return fetch(hookURL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      msgtype: 'text',
-      text: { content: message }
-    })
-  })
-}
-
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/api', (c) => c.text(crypto.randomUUID()))
 
 // supabase proxy
-app.all('/supa/*', async (c) => {
+app.all('/api/supabase/*', async (c) => {
   const supaUrl = new URL(c.env.SUPABASE_URL)
   const targetURL = new URL(c.req.url);
   targetURL.protocol = supaUrl.protocol
@@ -129,27 +115,6 @@ app.all('/supa/*', async (c) => {
     body: c.req.raw.body
   });
   return fetch(newRequest)
-})
-
-// api create signal room
-app.post('/api/signals/:name', async (c) => {
-  const name = c.req.param('name')
-  if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.json({}, 400)
-  }
-  const signalRoom = await c.req.json() as SignalRoom
-  await setSignal(c, signalRoom)
-  return c.json({}, 200)
-})
-
-// api get signal room
-app.get('/api/signals/:name', async (c) => {
-  const name = c.req.param('name')
-  if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.json({}, 404)
-  }
-  const room = await getSignal(c, name)
-  return room ? c.json(room, 200) : c.json({}, 404)
 })
 
 // update stream room's name
@@ -190,7 +155,7 @@ app.post('/api/rooms/:name/message', async (c) => {
 })
 
 // api create session
-app.post('/api/sessions', async (c) => {
+app.post('/api/sessions/:name?', async (c) => {
   const sdp = await c.req.text()
   if (!sdp?.length) {
     return c.text('invalid request', 400)
@@ -206,7 +171,7 @@ app.post('/api/sessions', async (c) => {
 
   console.log(`new ${hasMedia ? 'stream' : 'dc'} session ${sid}`)
   if (dcOnly) {
-    c.header('Location', `sessions/dc/${sid}`)
+    c.header('Location', `/api/sessions/dc/${sid}`)
     c.header('Access-Control-Expose-Headers', 'Location')
     c.header('Access-Control-Allow-Origin', '*')
     return c.text(session.sessionDescription?.sdp || '')
@@ -219,19 +184,16 @@ app.post('/api/sessions', async (c) => {
   })
   const tracksRes = await res.json() as TracksResponse
 
-  if (c.env.WEB_HOOK?.length) {
-    await sendWebHook(c.env.WEB_HOOK, `https://${c.req.header('Host')}?sid=${sid}_`)
-  }
-
   // create session secret
+  const name = c.req.param('name')
   const secret = crypto.randomUUID()
   const succ = await newStreamRoom(c, {
     id: sid,
-    name: sid,
+    name: name || sid,
     secret: secret
   })
 
-  c.header('Location', `sessions/${secret}/${sid}`)
+  c.header('Location', `/api/sessions/${secret}/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
   return succ ? c.text(tracksRes.sessionDescription?.sdp || '') : c.text('create failed', 500)
@@ -290,9 +252,6 @@ app.delete('/api/sessions/:secret/:sid', async (c) => {
     return c.json({}, 403)
   }
 
-  if (c.env.WEB_HOOK?.length) {
-    await sendWebHook(c.env.WEB_HOOK, `session end ${sid}`)
-  }
   await delStreamRoom(c, sid)
   await delStreamSubs(c, sid)
   console.log(`del stream session ${sid}`)
@@ -300,7 +259,7 @@ app.delete('/api/sessions/:secret/:sid', async (c) => {
 })
 
 // api play session
-app.post('/api/sessions/:sid', async (c) => {
+app.post('/api/sessions/:sid/play', async (c) => {
   const streamSid = c.req.param('sid')
   const sessionStat = await getSessionStatus(c, streamSid)
   if (!sessionStat?.tracks?.length && !sessionStat?.datachannels?.length) {
@@ -324,7 +283,7 @@ app.post('/api/sessions/:sid', async (c) => {
   // save new sub to session
   await putStreamSubs(c, streamSid, playerSid)
 
-  c.header('Location', `sessions/sub/${playerSid}`)
+  c.header('Location', `/api/sessions/${playerSid}/play`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
   return c.text(joinRes.sessionDescription.sdp, 201)

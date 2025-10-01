@@ -127,7 +127,7 @@ export class WHEPPlayer {
     })
 
     onChatMessage?.(`loading ${sidParam}`)
-    player.load(new URL(getSessionUrl(sidParam))).then(() => {
+    player.load(new URL(getSessionUrl(sidParam) + '/play')).then(() => {
       const playerObj = player as never
       const playerAdapter = playerObj['adapter'] as never
       const localPeer = playerAdapter['localPeer'] as never

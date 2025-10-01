@@ -46,7 +46,7 @@ export function getPlayerUrl(sid?: string, name?: string): string {
   const playerHost = window.location.host
   const protocol = window.location.protocol
   if (name?.length)
-    return `${protocol}//${playerHost}?name=${name}`
+    return `${protocol}//${playerHost}?n=${name}`
   return `${protocol}//${playerHost}` + (sid ? `?sid=${sid}` : '')
 }
 

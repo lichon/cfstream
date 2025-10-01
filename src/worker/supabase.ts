@@ -1,12 +1,6 @@
 import { Context } from 'hono'
 import { createClient } from '@supabase/supabase-js'
 
-export interface SignalRoom {
-  sid: string
-  offer: string
-  answer: string
-}
-
 export interface StreamRoom {
   id: string
   name: string
@@ -17,32 +11,6 @@ function getSupabase(c: Context) {
   return createClient(c.env.SUPABASE_URL, c.env.SUPABASE_KEY, {
     db: { schema: 'public' }
   })
-}
-
-export async function getSignal(c: Context, id: string): Promise<SignalRoom | null> {
-  const { data, error } = await getSupabase(c)
-    .from('signals')
-    .select('*')
-    .eq('id', id)
-    .single()
-
-  if (error) {
-    console.error('Error fetching signal room:', error)
-    return null
-  }
-  return data as SignalRoom
-}
-
-export async function setSignal(c: Context, signal: SignalRoom): Promise<boolean> {
-  const { error } = await getSupabase(c)
-    .from('signals')
-    .upsert({ ...signal })
-
-  if (error) {
-    console.error('Error setting signal room:', error)
-    return false
-  }
-  return true
 }
 
 export async function getStreamRoom(c: Context, sid: string): Promise<StreamRoom | null> {
@@ -64,7 +32,8 @@ export async function getStreamRoomByName(c: Context, name: string): Promise<Str
     .from('stream_rooms')
     .select('*')
     .eq('name', name)
-    .order('create_at', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
     .single()
 
   if (error) {

@@ -2,11 +2,9 @@ import { WHIPClient } from '@eyevinn/whip-web-client'
 import { SignalPeer } from './signalpeer'
 import {
   requestDataChannel,
-  setSessionName,
   getSessionInfo,
   getSessionUrl,
   extractSessionIdFromUrl,
-  extractSessionSecretIdFromUrl
 } from './api'
 
 import { getConfig } from '../config'
@@ -111,7 +109,7 @@ export class WHIPStreamer {
     console.log(LOG_TAG, `video track ${videoTrack?.id} ${videoTrack?.kind} ${videoTrack?.label}`)
 
     this.client = new WHIPClient({
-      endpoint: getSessionUrl(),
+      endpoint: getSessionUrl(this.config.sessionName),
       opts: {
         debug: debug,
         noTrickleIce: true,
@@ -123,18 +121,9 @@ export class WHIPStreamer {
           console.log(LOG_TAG, `client peer ${peer.connectionState}`)
           if (peer.connectionState === 'connected') {
             this.client!.getResourceUrl().then(resUrl => {
-              const sid = extractSessionIdFromUrl(resUrl)
-              this.config.onOpen?.(sid!)
-              requestDataChannel(sid!, peer).then(dc => {
-                this.streamerDc = dc
-                dc.onclose = () => {
-                  console.log(LOG_TAG, 'client dc close')
-                }
-                dc.onopen = () => {
-                  console.log(LOG_TAG, 'client dc open')
-                  // this.startSignalPeer()
-                }
-              })
+              const sid = extractSessionIdFromUrl(resUrl)!
+              this.config.onOpen?.(sid)
+              // this.initSignal(sid, peer)
             })
             this.setVideoBitrate(peer, videoTrack)
           }
@@ -146,9 +135,7 @@ export class WHIPStreamer {
     this.config.onChatMessage?.('client starting')
     await this.client.ingest(mediaStream)
     this.config.videoElement.srcObject = mediaStream
-    const [secret, sid] = extractSessionSecretIdFromUrl(await this.client.getResourceUrl() || '')
-    this.streamerSid = sid
-    this.setSessionName(sid, this.config.sessionName, secret)
+    this.streamerSid = extractSessionIdFromUrl(await this.client.getResourceUrl())
   }
 
   async stop() {
@@ -163,16 +150,20 @@ export class WHIPStreamer {
     }
   }
 
-  private async setSessionName(sid: string, name?: string, secret?: string) {
-    if (!name?.length || !secret?.length)
-      return
-    const res = await setSessionName(sid, name, secret)
-    if (res.status == 200) {
-      this.config.onChatMessage?.(`set session ${sid} name to ${name}`)
-    }
+  // @ts-expect-error keep
+  private initSignal(sid: string, peer: RTCPeerConnection) {
+    requestDataChannel(sid, peer).then(dc => {
+      this.streamerDc = dc
+      dc.onclose = () => {
+        console.log(LOG_TAG, 'client dc close')
+      }
+      dc.onopen = () => {
+        console.log(LOG_TAG, 'client dc open')
+        this.startSignalPeer(sid, dc)
+      }
+    })
   }
 
-  // @ts-expect-error keep
   private startSignalPeer(sessionId: string, broadcastDc?: RTCDataChannel) {
     let broadcastTimeout: NodeJS.Timeout
 
