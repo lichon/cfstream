@@ -70,18 +70,12 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
       })
       .on('presence', { event: 'join'}, (e) => {
         e.newPresences.map(p => {
-          onChatMessage?.({
-            type: 'presence',
-            content: `${p.name} joined`,
-          })
+          console.log(`${roomName} ${p.name} joined`)
         })
       })
       .on('presence', { event: 'leave'}, (e) => {
         e.leftPresences.map(p => {
-          onChatMessage?.({
-            type: 'presence',
-            content: `${p.name} left`,
-          })
+          console.log(`${roomName} ${p.name} left`)
         })
       })
       .subscribe(async (status) => {
