@@ -55,7 +55,8 @@ export class WHEPPlayer {
     }
   }
 
-  private initPlayerSignal = (peer: RTCPeerConnection, playerAdapter: never, sidParam: string) => {
+  // @ts-expect-error keep
+  private initPlayerSignal = (peer: RTCPeerConnection, playerAdapter: never, streamSid: string) => {
     const resourceUrl = playerAdapter['resource'] as string
     const playerSid = extractSessionIdFromUrl(resourceUrl)
     if (!playerSid?.length) {
@@ -72,7 +73,7 @@ export class WHEPPlayer {
       this.playerDc = dc
     })
     // signal subscriber
-    requestDataChannel(playerSid, peer, sidParam).then(dc => {
+    requestDataChannel(playerSid, peer, streamSid).then(dc => {
       dc.onopen = () => {
         console.log(LOG_TAG, 'subscriber dc open')
       }
@@ -135,7 +136,7 @@ export class WHEPPlayer {
 
       bootstrapDc.onopen = () => {
         this.jitterBufferConfig(peer)
-        this.initPlayerSignal(peer, playerAdapter, sidParam)
+        // this.initPlayerSignal(peer, playerAdapter, sidParam)
         onOpen?.(sidParam)
       }
     })

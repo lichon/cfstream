@@ -132,7 +132,7 @@ export class WHIPStreamer {
                 }
                 dc.onopen = () => {
                   console.log(LOG_TAG, 'client dc open')
-                  this.startSignalPeer(sid!, dc)
+                  // this.startSignalPeer()
                 }
               })
             })
@@ -172,6 +172,7 @@ export class WHIPStreamer {
     }
   }
 
+  // @ts-expect-error keep
   private startSignalPeer(sessionId: string, broadcastDc?: RTCDataChannel) {
     let broadcastTimeout: NodeJS.Timeout
 

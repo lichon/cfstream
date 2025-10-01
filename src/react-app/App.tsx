@@ -193,10 +193,11 @@ function App() {
       handleCmd(text)
       return
     }
-    if (isChannelConnected) {
-      sendChannelMessage(text)
-      return
-    }
+    sendChannelMessage(text)
+  }
+
+  // @ts-expect-error keep
+  function _sendDcMessage(text: string) {
     const msgObject = SignalPeer.newChatMsg(text)
     const playerDc = whepPlayer?.getPlayerDc()
     if (playerDc) {

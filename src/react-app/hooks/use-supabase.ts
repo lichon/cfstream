@@ -19,6 +19,7 @@ interface ChannelConfig {
   onChatMessage?: (msg: ChannelMessage) => void
 }
 
+const SELF_SENDER = 'Self'
 const supabase = createClient()
 const recentMessages: string[] = []
 
@@ -37,13 +38,13 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
     newChannel
       .on('broadcast', { event: 'message' }, (msg) => {
         if (recentMessages.includes(msg.payload.id)) {
-          msg.payload.sender = 'You'
+          msg.payload.sender = SELF_SENDER
         }
         onChatMessage?.(msg.payload as ChannelMessage)
       })
       .on('broadcast', { event: 'notify' }, (msg) => {
         if (recentMessages.includes(msg.payload.id)) {
-          msg.payload.sender = 'You'
+          msg.payload.sender = SELF_SENDER
         }
         onNotification?.(msg.payload as ChannelMessage)
       })

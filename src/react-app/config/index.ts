@@ -46,7 +46,7 @@ const defaultConfig: AppConfig = {
   ui: {
     ttsEnabled: true,
     streamOwnerDisplayName: 'Owner',
-    selfDisplayName: 'You',
+    selfDisplayName: 'Self',
     maxHistoryMessage: 1000,
     openLinkOnShare: ['true', '1'].includes(import.meta.env.VITE_OPEN_ON_SHARE),
     isMobilePlatform: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
