@@ -44,7 +44,7 @@
     "cf-typegen": "wrangler types",
     "check": "tsc && vite build && wrangler deploy --dry-run",
     "deploy": "pnpm run build && wrangler deploy",
-    "dev": "vite --host",
+    "dev": "vite --host --open vs?r=112233",
     "lint": "eslint .",
     "preview": "pnpm run build && vite preview"
   },

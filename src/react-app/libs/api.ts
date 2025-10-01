@@ -46,8 +46,8 @@ export function getPlayerUrl(sid?: string, name?: string): string {
   const playerHost = window.location.host
   const protocol = window.location.protocol
   if (name?.length)
-    return `${protocol}//${playerHost}?n=${name}`
-  return `${protocol}//${playerHost}` + (sid ? `?sid=${sid}` : '')
+    return `${protocol}//${playerHost}/watch?r=${name}`
+  return `${protocol}//${playerHost}/watch` + (sid ? `?s=${sid}` : '')
 }
 
 export function extractSessionIdFromUrl(url: string | null): string | undefined {

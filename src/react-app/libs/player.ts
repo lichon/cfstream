@@ -106,7 +106,7 @@ export class WHEPPlayer {
     if (nameParam?.length) {
       sidParam = await getSessionByName(nameParam)
       if (!sidParam?.length) {
-        onChatMessage?.('session not found')
+        onChatMessage?.('loading session not found')
         return
       }
     }

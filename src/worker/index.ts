@@ -140,7 +140,7 @@ app.get('/api/rooms/:name', async (c) => {
     return c.text('invalid room', 404)
   }
   const room = await getStreamRoomByName(c, name)
-  return room ? c.text(room.id, 200) : c.text('room not found', 404)
+  return room ? c.text(room.id, 200) : c.text('', 404)
 })
 
 // post message to room

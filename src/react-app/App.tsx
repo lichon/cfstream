@@ -10,7 +10,7 @@ import { useSupabaseChannel } from './hooks/use-supabase'
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
-import { SignalPeer, patchRTCPeerConnection } from './libs/signalpeer'
+import { SignalPeer } from './libs/signalpeer'
 import { ChromeTTS } from './libs/tts'
 import { WHEPPlayer } from './libs/player'
 import { WHIPStreamer } from './libs/streamer'
@@ -18,9 +18,9 @@ import { getPlayerUrl } from './libs/api'
 
 let _firstLoad = true
 const urlParams = new URLSearchParams(window.location.search)
-const sidParam = urlParams.get('sid') || urlParams.get('s') || undefined
-const nameParam = urlParams.get('name') || urlParams.get('n') || undefined
-const roomParam = urlParams.get('room') || urlParams.get('r') || undefined
+const sidParam = urlParams.get('s') || undefined
+const roomParam = urlParams.get('r') || undefined
+const isPlayer = window.location.pathname.startsWith('/watch')
 const SYSTEM_LOG = 'System'
 
 const chatCmdList = getConfig().ui.cmdList
@@ -31,8 +31,6 @@ const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
 let ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
 let debugEnabled = getConfig().debug
-
-patchRTCPeerConnection()
 
 function App() {
   const ttsPlayer = useMemo(() => new ChromeTTS(), [])
@@ -50,7 +48,7 @@ function App() {
   const [isScreenShare, setScreenShare] = useState(false)
 
   const { sendChannelMessage, isChannelConnected } = useSupabaseChannel({
-    roomName: roomParam ?? nameParam ?? '',
+    roomName: roomParam ?? '',
     onChatMessage: (msg) => {
       addChatMessage(msg.content as string, msg.sender)
     }
@@ -59,8 +57,7 @@ function App() {
   useEffect(() => {
     if (_firstLoad) {
       _firstLoad = false
-      help()
-      startPlayer()
+      firstLoad()
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -73,8 +70,6 @@ function App() {
       if (event.target !== document.body) return
       if (event.key === 'Enter') {
         setChatVisible(true)
-      } else if (event.key === 'm') {
-        handleCmd('/mute')
       }
     }
 
@@ -85,8 +80,11 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Empty dependency array means this runs once on mount
 
-  function help() {
+  function firstLoad() {
     addChatMessage('type /? for help')
+    if (isPlayer) {
+      startPlayer()
+    }
   }
 
   function stopPlayer() {
@@ -98,7 +96,7 @@ function App() {
     if (whepPlayer)
       return
 
-    if (!nameParam?.length && !sidParam?.length) {
+    if (!roomParam?.length && !sidParam?.length) {
       return
     }
 
@@ -117,7 +115,7 @@ function App() {
         setStreamSession(undefined)
       },
     })
-    await player.start(sidParam, nameParam)
+    await player.start(sidParam, roomParam)
     setWHEPPlayer(player)
   }
 
@@ -294,7 +292,7 @@ function App() {
                 stopPlayer()
               } else {
                 // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-                sidParam || nameParam ? startPlayer() : setShowHoverMenu(true)
+                sidParam || roomParam ? startPlayer() : setShowHoverMenu(true)
               }
             }}
           >
@@ -320,10 +318,7 @@ function App() {
         <div className='control-button-container' >
           <button className='control-bt'
             onClick={() => {
-              if (!streamSession?.length)
-                return
-
-              const playerUrl = getPlayerUrl(streamSession, roomParam || nameParam)
+              const playerUrl = getPlayerUrl(streamSession, roomParam)
               if (openLinkOnShare) {
                 window.open(playerUrl, '_blank')
               }
@@ -331,14 +326,14 @@ function App() {
               navigator.clipboard?.writeText(playerUrl)
             }}
           >
-            Player link
+            Share
           </button>
         </div>
         <div className='control-button-container' >
           <button className='control-bt'
             onClick={() => { switchMedia() }}
           >
-            Switch Camera
+            Switch Media
           </button>
         </div>
       </div>
@@ -388,7 +383,7 @@ function App() {
         onSubmit={(text) => onTextSubmit(text)}
       />
       <QROverlay
-        url={`${getPlayerUrl(streamSession, roomParam || nameParam)}`}
+        url={`${getPlayerUrl(streamSession, roomParam)}`}
         show={qrVisible}
         onClose={() => setQrVisible(false)}
       />

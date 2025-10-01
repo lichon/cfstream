@@ -45,7 +45,7 @@ export class WHIPStreamer {
         video: {
           width: { ideal: 1920 },
           height: { ideal: 1080 },
-          frameRate: { ideal: 15 },
+          frameRate: { ideal: 30 },
         },
         audio: true,
       })
@@ -164,6 +164,7 @@ export class WHIPStreamer {
     })
   }
 
+  // deprecated, using supabase realtime
   private startSignalPeer(sessionId: string, broadcastDc?: RTCDataChannel) {
     let broadcastTimeout: NodeJS.Timeout
 
