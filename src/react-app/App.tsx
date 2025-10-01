@@ -260,11 +260,7 @@ function App() {
   async function startStream(shareScreen?: boolean) {
     setShowHoverMenu(false)
     setScreenShare(shareScreen ?? false)
-
-    addChatMessage('getting media from user')
     const mediaStream = await WHIPStreamer.getMediaStream(shareScreen)
-
-    requestWakeLock()
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
       videoElement: getVideoElement(),
@@ -280,6 +276,7 @@ function App() {
       }
     })
     await streamer.start(mediaStream)
+    requestWakeLock()
     setWHIPStreamer(streamer)
   }
 

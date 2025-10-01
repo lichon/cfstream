@@ -144,7 +144,6 @@ export class WHIPStreamer {
     })
 
     this.config.onChatMessage?.('client starting')
-    await this.client.setIceServersFromEndpoint()
     await this.client.ingest(mediaStream)
     this.config.videoElement.srcObject = mediaStream
     const [secret, sid] = extractSessionSecretIdFromUrl(await this.client.getResourceUrl() || '')
