@@ -9,10 +9,11 @@ export interface ChatMessage {
 interface ChatOverlayProps {
   show: boolean;
   messages: ChatMessage[];
+  online: boolean;
   onSubmit: (message: string) => void;
 }
 
-export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSubmit: onSend }) => {
+export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online, onSubmit }) => {
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,7 +35,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSubm
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (inputMessage.trim()) {
-      onSend(inputMessage);
+      onSubmit(inputMessage);
       setInputMessage('');
     }
   };
@@ -58,7 +59,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSubm
             flexDirection: 'column',
           }}
         >
-          <div style={{ flex: 1, overflowY: 'auto', marginBottom: '10px' }}>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
             {messages.map((msg, index) => (
               <div
                 key={index}
@@ -106,9 +107,9 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, onSubm
                 padding: '8px 16px',
                 borderRadius: '0.5rem',
                 border: 'none',
-                backgroundColor: '#4CAF50',
+                backgroundColor: online ? '#4CAF50' : '#888',
                 color: 'white',
-                cursor: 'pointer',
+                cursor: online ? 'pointer' : 'not-allowed',
               }}
               onClick={() => inputRef.current?.focus()}
             >

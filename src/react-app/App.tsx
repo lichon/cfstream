@@ -384,6 +384,7 @@ function App() {
       <ChatOverlay
         show={chatVisible}
         messages={chatMessages}
+        online={isChannelConnected}
         onSubmit={(text) => onTextSubmit(text)}
       />
       <QROverlay
