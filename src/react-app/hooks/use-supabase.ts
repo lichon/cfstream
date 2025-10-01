@@ -3,23 +3,26 @@
 import { createClient } from '../libs/supabase'
 import { useCallback, useEffect, useState } from 'react'
 
-export interface ChatMessage {
+type ChannelMessageType = 'message' | 'notify' | 'rpc';
+
+export interface ChannelMessage {
   id?: string
-  content: string
+  type?: ChannelMessageType
+  content: string | object
   timestamp: string
   sender?: string
 }
 
 interface ChannelConfig {
   roomName: string
-  onChatMessage?: (msg: ChatMessage) => void
+  onNotification?: (msg: ChannelMessage) => void
+  onChatMessage?: (msg: ChannelMessage) => void
 }
 
-const EVENT_MESSAGE_TYPE = 'message'
 const supabase = createClient()
 const recentMessages: string[] = []
 
-export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
+export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: ChannelConfig) {
   const [channel, setChannel] = useState<ReturnType<typeof supabase.channel> | null>(null)
   const [isChannelConnected, setIsConnected] = useState(false)
 
@@ -32,11 +35,17 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
     })
 
     newChannel
-      .on('broadcast', { event: EVENT_MESSAGE_TYPE }, (msg) => {
+      .on('broadcast', { event: 'message' }, (msg) => {
         if (recentMessages.includes(msg.payload.id)) {
           msg.payload.sender = 'You'
         }
-        onChatMessage?.(msg.payload as ChatMessage)
+        onChatMessage?.(msg.payload as ChannelMessage)
+      })
+      .on('broadcast', { event: 'notify' }, (msg) => {
+        if (recentMessages.includes(msg.payload.id)) {
+          msg.payload.sender = 'You'
+        }
+        onNotification?.(msg.payload as ChannelMessage)
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -60,7 +69,7 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
   }, [isChannelConnected])
 
   const sendChannelMessage = useCallback(
-    async (content: string) => {
+    async (content: string | object, type?: ChannelMessageType) => {
       if (!channel || !isChannelConnected) return
 
       const newMsgId = crypto.randomUUID()
@@ -68,7 +77,7 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
       if (recentMessages.length > 10) {
         recentMessages.pop()
       }
-      const message: ChatMessage = {
+      const message: ChannelMessage = {
         id: newMsgId,
         content,
         sender: 'nickname',
@@ -77,7 +86,7 @@ export function useSupabaseChannel({ roomName, onChatMessage }: ChannelConfig) {
 
       await channel.send({
         type: 'broadcast',
-        event: EVENT_MESSAGE_TYPE,
+        event: type || 'message',
         payload: message,
       })
     },
