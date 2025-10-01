@@ -3,14 +3,19 @@
 import { createClient } from '../libs/supabase'
 import { useCallback, useEffect, useState } from 'react'
 
-type ChannelMessageType = 'message' | 'notify' | 'rpc';
+type ChannelMessageType = 'message' | 'notify' | 'presence';
 
 export interface ChannelMessage {
   id?: string
   type?: ChannelMessageType
   content: string | object
-  timestamp: string
+  timestamp?: string
   sender?: string
+}
+
+interface ChannelMember {
+  id: string
+  name: string
 }
 
 interface ChannelConfig {
@@ -19,6 +24,8 @@ interface ChannelConfig {
   onChatMessage?: (msg: ChannelMessage) => void
 }
 
+// for test
+const myId = window.location.pathname
 const SELF_SENDER = 'Self'
 const supabase = createClient()
 const recentMessages: string[] = []
@@ -26,16 +33,20 @@ const recentMessages: string[] = []
 export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: ChannelConfig) {
   const [channel, setChannel] = useState<ReturnType<typeof supabase.channel> | null>(null)
   const [isChannelConnected, setIsConnected] = useState(false)
+  const [onlineMembers, setOnlineMembers] = useState<ChannelMember[]>([])
 
   useEffect(() => {
     if (!roomName?.length) {
       return
     }
-    const newChannel = supabase.channel(`room:${roomName}:messages`, {
-      config: { broadcast: { self: true }, private: false }
+    const channel = supabase.channel(`room:${roomName}:messages`, {
+      config: {
+        broadcast: { self: true },
+        private: false
+      }
     })
 
-    newChannel
+    channel
       .on('broadcast', { event: 'message' }, (msg) => {
         if (recentMessages.includes(msg.payload.id)) {
           msg.payload.sender = SELF_SENDER
@@ -48,16 +59,45 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
         }
         onNotification?.(msg.payload as ChannelMessage)
       })
+      .on('presence', { event: 'sync'}, () => {
+        const newState = channel.presenceState<ChannelMember>()
+        const newUsers = Array.from(
+          Object.entries(newState).map(([key, values]) => [
+            { id: key, name: values[0].name }
+          ][0])
+        )
+        setOnlineMembers(newUsers)
+      })
+      .on('presence', { event: 'join'}, (e) => {
+        e.newPresences.map(p => {
+          onChatMessage?.({
+            type: 'presence',
+            content: `${p.name} joined`,
+          })
+        })
+      })
+      .on('presence', { event: 'leave'}, (e) => {
+        e.leftPresences.map(p => {
+          onChatMessage?.({
+            type: 'presence',
+            content: `${p.name} left`,
+          })
+        })
+      })
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          setIsConnected(true)
+        if (status !== 'SUBSCRIBED') {
+          return
         }
+        setIsConnected(true)
+        await channel.track({
+          name: myId
+        })
       })
 
-    setChannel(newChannel)
+    setChannel(channel)
 
     return () => {
-      supabase.removeChannel(newChannel)
+      supabase.removeChannel(channel)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -81,7 +121,7 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
       const message: ChannelMessage = {
         id: newMsgId,
         content,
-        sender: 'nickname',
+        sender: myId,
         timestamp: new Date().toISOString(),
       }
 
@@ -94,5 +134,5 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
     [channel, isChannelConnected]
   )
 
-  return { sendChannelMessage, isChannelConnected }
+  return { sendChannelMessage, isChannelConnected, onlineMembers }
 }
