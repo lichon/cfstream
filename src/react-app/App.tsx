@@ -1,6 +1,6 @@
 // src/App.tsx
 
-import { useMemo, useState, useEffect } from 'react'
+import { useRef, useMemo, useState, useEffect } from 'react'
 import './App.css'
 
 import { getConfig } from './config'
@@ -17,9 +17,10 @@ import { WHIPStreamer } from './libs/streamer'
 import { getPlayerUrl } from './libs/api'
 
 let _firstLoad = true
-const sidParam = new URLSearchParams(window.location.search).get('sid') || undefined
-const nameParam = new URLSearchParams(window.location.search).get('name') || undefined
-const roomParam = new URLSearchParams(window.location.search).get('room') || undefined
+const urlParams = new URLSearchParams(window.location.search)
+const sidParam = urlParams.get('sid') || urlParams.get('s') || undefined
+const nameParam = urlParams.get('name') || urlParams.get('n') || undefined
+const roomParam = urlParams.get('room') || urlParams.get('r') || undefined
 const SYSTEM_LOG = 'System'
 
 const chatCmdList = getConfig().ui.cmdList
@@ -31,14 +32,11 @@ const selfDisplayName = getConfig().ui.selfDisplayName
 let ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
 let debugEnabled = getConfig().debug
 
-function getVideoElement() {
-  return window.document.querySelector<HTMLVideoElement>('#video')!
-}
-
 patchRTCPeerConnection()
 
 function App() {
   const ttsPlayer = useMemo(() => new ChromeTTS(), [])
+  const videoRef = useRef<HTMLVideoElement>(null);
   const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock()
   const [streamSession, setStreamSession] = useState<string>()
   const [whipStreamer, setWHIPStreamer] = useState<WHIPStreamer>()
@@ -54,7 +52,7 @@ function App() {
   const { sendChannelMessage, isChannelConnected } = useSupabaseChannel({
     roomName: roomParam ?? nameParam ?? '',
     onChatMessage: (msg) => {
-      addChatMessage(msg.content, msg.sender)
+      addChatMessage(msg.content as string, msg.sender)
     }
   })
 
@@ -105,7 +103,7 @@ function App() {
     }
 
     const player = new WHEPPlayer({
-      videoElement: getVideoElement(),
+      videoElement: videoRef.current!,
       onChatMessage: (message: string, from?: string) => {
         addChatMessage(message, from)
       },
@@ -124,7 +122,7 @@ function App() {
   }
 
   async function handleCmd(text: string) {
-    const v = getVideoElement()!
+    const v = videoRef.current!
     switch (text) {
       case '/?':
         addChatMessage(`TODO add help tips`)
@@ -263,7 +261,7 @@ function App() {
     const mediaStream = await WHIPStreamer.getMediaStream(shareScreen)
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
-      videoElement: getVideoElement(),
+      videoElement: videoRef.current!,
       onChatMessage: (message: string, from?: string) => {
         addChatMessage(message, from)
       },
@@ -348,6 +346,7 @@ function App() {
         <video id='video' muted autoPlay playsInline
           // Add reference for Safari PiP API
           ref={(video) => {
+            videoRef.current = video
             if (video) {
               let playTriggered = Date.now()
               video.disablePictureInPicture = false
