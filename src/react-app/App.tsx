@@ -6,14 +6,16 @@ import { getConfig } from './config'
 import { useWakeLock } from './hooks/use-wakelock'
 import { useSupabaseChannel } from './hooks/use-supabase'
 
+import StreamVideo from './components/stream-video'
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
-import { SignalPeer } from './libs/signalpeer'
-import { ChromeTTS } from './libs/tts'
-import { WHEPPlayer } from './libs/player'
-import { WHIPStreamer } from './libs/streamer'
-import { getPlayerUrl } from './libs/api'
+import { AvatarStack } from './components/avatar-stack'
+import { SignalPeer } from './lib/signalpeer'
+import { ChromeTTS } from './lib/tts'
+import { WHEPPlayer } from './lib/player'
+import { WHIPStreamer } from './lib/streamer'
+import { getPlayerUrl } from './lib/api'
 
 let _firstLoad = true
 const urlParams = new URLSearchParams(window.location.search)
@@ -46,7 +48,7 @@ function App() {
   const [isFrontCamera, setIsFrontCamera] = useState(false)
   const [isScreenShare, setScreenShare] = useState(false)
 
-  const { sendChannelMessage, isChannelConnected } = useSupabaseChannel({
+  const { sendChannelMessage, isChannelConnected, onlineMembers } = useSupabaseChannel({
     roomName: roomParam ?? '',
     onChatMessage: (msg) => {
       addChatMessage(msg.content as string, msg.sender)
@@ -278,16 +280,14 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-neutral-900 text-white">
-      <div
-        className="fixed top-8 left-1/2 -translate-x-1/2 z-50 flex gap-4 bg-black/50 p-2 rounded-lg"
-      >
+      <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 flex gap-4 bg-black/50 p-2 rounded-lg">
         <div
           className="relative inline-block"
           onMouseEnter={() => setShowHoverMenu(!isPlayer && !streamSession)}
           onMouseLeave={() => setShowHoverMenu(false)}
         >
           <button
-            className="h-full px-4 py-2 rounded bg-neutral-900 text-white hover:bg-neutral-600 transition"
+            className="base-button"
             onClick={() => {
               if (streamSession) {
                 releaseWakeLock()
@@ -305,13 +305,13 @@ function App() {
             <div className="absolute top-full left-0 bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg z-50 min-w-[150px]">
               <button
                 onClick={() => startStream(false)}
-                className="block w-full px-3 py-2 text-left text-gray-200 hover:bg-neutral-700 transition rounded-lg"
+                className="base-button menu-button"
               >
                 Start Camera
               </button>
               <button
                 onClick={() => startStream(true)}
-                className="block w-full px-3 py-2 text-left text-gray-200 hover:bg-neutral-700 transition rounded-lg"
+                className="base-button menu-button"
               >
                 Start Screen
               </button>
@@ -320,7 +320,7 @@ function App() {
         </div>
         <div className="relative inline-block">
           <button
-            className="h-full px-4 py-2 rounded bg-neutral-900 text-white hover:bg-neutral-600 transition"
+            className="base-button"
             onClick={() => {
               const playerUrl = getPlayerUrl(streamSession, roomParam)
               if (openLinkOnShare) {
@@ -335,61 +335,27 @@ function App() {
         </div>
         <div className="relative inline-block">
           <button
-            className="h-full px-4 py-2 rounded bg-neutral-900 text-white hover:bg-neutral-600 transition"
-            onClick={() => {
-              switchMedia()
-            }}
+            className="base-button"
+            onClick={switchMedia}
           >
             {isPlayer ? 'Switch Mute' : 'Switch Media'}
           </button>
         </div>
       </div>
 
-      <div className="fixed inset-0 overflow-hidden">
-        <video
-          muted
-          autoPlay
-          playsInline
-          ref={(video) => {
-            videoRef.current = video
-            if (video) {
-              let playTriggered = Date.now()
-              video.disablePictureInPicture = false
-              video.playsInline = true
-              video.onplay = () => {
-                playTriggered = Date.now()
-                video.controls = false
-              }
-              video.onclick = () => {
-                setLogVisible(false)
-                if (!isMoblie) return
-                if (video.paused) {
-                  video.controls = false
-                  video.play()
-                } else if (Date.now() - playTriggered > 100) {
-                  video.controls = true
-                  video.pause()
-                }
-              }
-            }
-          }}
-          onDoubleClick={(ev) => {
-            const video = ev.target as HTMLVideoElement
-            if (!document.fullscreenElement) {
-              video.requestFullscreen()
-            } else {
-              document.exitFullscreen()
-            }
-          }}
-          className="absolute top-0 left-0 w-full h-full"
-        ></video>
-      </div>
-
+      <StreamVideo
+        videoRef={videoRef}
+        isMoblie={isMoblie}
+        onClick={() => { setLogVisible(false) }}
+      />
+      <AvatarStack
+        avatars={onlineMembers}
+      />
       <ChatOverlay
         show={chatVisible}
         messages={chatMessages}
         online={isChannelConnected}
-        onSubmit={(text) => onTextSubmit(text)}
+        onSubmit={(text: string) => onTextSubmit(text)}
       />
       <QROverlay
         url={`${getPlayerUrl(streamSession, roomParam)}`}

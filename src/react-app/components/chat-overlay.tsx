@@ -1,61 +1,61 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react'
 
 export interface ChatMessage {
-  content: string;
-  timestamp: string;
-  sender: string;
+  content: string
+  timestamp: string
+  sender: string
 }
 
 interface ChatOverlayProps {
-  show: boolean;
-  messages: ChatMessage[];
-  online: boolean;
-  onSubmit: (message: string) => void;
+  show: boolean
+  messages: ChatMessage[]
+  online: boolean
+  onSubmit: (message: string) => void
 }
 
 export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online, onSubmit }) => {
-  const [inputMessage, setInputMessage] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [inputMessage, setInputMessage] = useState('')
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    scrollToBottom()
+  }, [messages])
 
   useEffect(() => {
     if (show) {
-      inputRef.current?.focus();
+      inputRef.current?.focus()
     }
-  }, [show]);
+  }, [show])
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     if (inputMessage.trim()) {
-      onSubmit(inputMessage);
-      setInputMessage('');
+      onSubmit(inputMessage)
+      setInputMessage('')
     }
-  };
+  }
 
   return (
     <>
       {show && (
         <div
-          className="fixed bottom-0 w-full max-h-[40%] bg-black/80 text-white p-2 overflow-auto z-[1000] rounded-lg flex flex-col"
+          className="fixed bottom-0 w-full max-h-[30%] bg-black/80 text-white p-2 overflow-auto z-[1000] rounded-lg flex flex-col"
         >
           <div className="flex-1 overflow-y-auto">
             {messages.map((msg, index) => (
               <div
                 key={index}
-                className="mb-2 text-xs font-mono whitespace-pre-wrap break-words text-left w-full"
+                className="mb-2 text-sm font-mono whitespace-pre-wrap break-words text-left w-full"
               >
-                <span className="opacity-70 text-xs">
+                <span className="opacity-50">
                   {new Date(msg.timestamp).toLocaleTimeString()} - {msg.sender}:{' '}
                 </span>
-                <span className="text-white">{msg.content}</span>
+                <span className="opacity-80 text-white">{msg.content}</span>
               </div>
             ))}
             <div ref={messagesEndRef} />
@@ -64,19 +64,22 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online
             <input
               name='input-chat'
               ref={inputRef}
-              maxLength={144}
+              maxLength={256}
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onBlur={() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })}
               className="flex-1 p-2 rounded-lg border-none bg-white/10 text-white outline-none"
               placeholder="Type a message..."
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
             />
             <button
               type="submit"
               className={`mr-0 px-4 py-2 rounded-lg border-none ${
                 online
-                  ? 'bg-green-600 hover:bg-green-700 cursor-pointer'
+                  ? 'bg-green-700 hover:bg-green-600 cursor-pointer'
                   : 'bg-gray-500 cursor-not-allowed'
               } text-white`}
               onClick={() => inputRef.current?.focus()}
@@ -87,5 +90,5 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online
         </div>
       )}
     </>
-  );
-};
+  )
+}

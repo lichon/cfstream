@@ -1,6 +1,6 @@
 'use client'
 
-import { createClient } from '../libs/supabase'
+import { createClient } from '../lib/supabase'
 import { useCallback, useEffect, useState } from 'react'
 
 type ChannelMessageType = 'message' | 'notify' | 'presence';
@@ -16,6 +16,7 @@ export interface ChannelMessage {
 interface ChannelMember {
   id: string
   name: string
+  image: string
 }
 
 interface ChannelConfig {
@@ -63,7 +64,7 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
         const newState = channel.presenceState<ChannelMember>()
         const newUsers = Array.from(
           Object.entries(newState).map(([key, values]) => [
-            { id: key, name: values[0].name }
+            { id: key, name: values[0].name, image: values[0].image }
           ][0])
         )
         setOnlineMembers(newUsers)
@@ -84,7 +85,8 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
         }
         setIsConnected(true)
         await channel.track({
-          name: myId
+          name: myId,
+          image: `https://api.dicebear.com/7.x/thumbs/svg?seed=${myId}`
         })
       })
 
