@@ -61,42 +61,17 @@ const LoggingOverlay: React.FC<LoggingOverlayProps> = ({ show: isVisible }) => {
     <>
       {isVisible && (
         <div
-          style={{
-            position: 'fixed',
-            bottom: '0',
-            minHeight: '10%',
-            width: '100%',
-            maxHeight: '60%',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            color: 'white',
-            padding: '10px',
-            overflow: 'auto',
-            zIndex: 9998,
-            borderRadius: '4px',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
+          className="fixed bottom-0 w-full min-h-[10%] max-h-[60%] bg-black/80 text-white p-2 overflow-auto z-[9998] rounded flex flex-col"
         >
           {logs.map((log, index) => (
             <div
               key={index}
-              style={{
-                color:
-                  log.type === 'error'
-                    ? '#ff6b6b'
-                    : log.type === 'warn'
-                    ? '#ffd93d'
-                    : '#6bff6b',
-                marginBottom: '5px',
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                textAlign: 'left',
-                width: '100%',
-              }}
+              className={`
+                mb-1 text-xs font-mono whitespace-pre-wrap break-words text-left w-full
+                ${log.type === 'error' ? 'text-red-400' : log.type === 'warn' ? 'text-yellow-300' : 'text-green-400'}
+              `}
             >
-              <span style={{ opacity: 0.7 }}>
+              <span className="opacity-70">
                 {new Date(log.timestamp).toLocaleTimeString()} -{' '}
               </span>
               {log.message}

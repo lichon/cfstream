@@ -1,39 +1,11 @@
 import { useEffect } from 'react';
 import QRCode from 'qrcode';
-import styled from 'styled-components';
 
 interface QROverlayProps {
   url: string;
   show: boolean;
   onClose: () => void;
 }
-
-// 使用 styled-components 定义样式
-const Overlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1001;
-`;
-
-const Container = styled.div`
-  background: white;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  text-align: center;
-`;
-
-const Description = styled.p`
-  margin: 0;
-  color: #666;
-  font-size: 14px;
-`;
 
 const QROverlay = ({ url, show, onClose }: QROverlayProps) => {
   useEffect(() => {
@@ -57,13 +29,19 @@ const QROverlay = ({ url, show, onClose }: QROverlayProps) => {
   if (!show) return null;
 
   return (
-    <Overlay onClick={onClose}>
-      <Container>
+    <div
+      className="fixed inset-0 bg-black/70 flex justify-center items-center z-[1001]"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white p-4 pb-0 rounded-lg text-center"
+        onClick={e => e.stopPropagation()}
+      >
         <canvas id="qrCode"></canvas>
-        <Description>Click anywhere to close</Description>
-      </Container>
-    </Overlay>
+        <p className="m-0 text-gray-500 text-sm">Click anywhere to close</p>
+      </div>
+    </div>
   );
 };
 
-export default QROverlay
+export default QROverlay;

@@ -1,7 +1,6 @@
 // src/App.tsx
 
 import { useRef, useMemo, useState, useEffect } from 'react'
-import './App.css'
 
 import { getConfig } from './config'
 import { useWakeLock } from './hooks/use-wakelock'
@@ -278,13 +277,17 @@ function App() {
   }
 
   return (
-    <>
-      <div id='control' className='control'>
-        <div className='control-button-container'
+    <div className="min-h-screen flex flex-col font-sans bg-neutral-900 text-white">
+      <div
+        className="fixed top-8 left-1/2 -translate-x-1/2 z-50 flex gap-4 bg-black/50 p-2 rounded-lg"
+      >
+        <div
+          className="relative inline-block"
           onMouseEnter={() => setShowHoverMenu(!isPlayer && !streamSession)}
           onMouseLeave={() => setShowHoverMenu(false)}
         >
-          <button className='control-bt'
+          <button
+            className="h-full px-4 py-2 rounded bg-neutral-900 text-white hover:bg-neutral-600 transition"
             onClick={() => {
               if (streamSession) {
                 releaseWakeLock()
@@ -299,24 +302,25 @@ function App() {
             {streamSession ? 'Stop' : isPlayer ? 'Play' : 'Start'}
           </button>
           {!streamSession && showHoverMenu && (
-            <div className='hover-menu'>
+            <div className="absolute top-full left-0 bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg z-50 min-w-[150px]">
               <button
                 onClick={() => startStream(false)}
-                className='hover-menu-item'
+                className="block w-full px-3 py-2 text-left text-gray-200 hover:bg-neutral-700 transition"
               >
                 Start Camera
               </button>
               <button
                 onClick={() => startStream(true)}
-                className='hover-menu-item'
+                className="block w-full px-3 py-2 text-left text-gray-200 hover:bg-neutral-700 transition"
               >
                 Start Screen
               </button>
             </div>
           )}
         </div>
-        <div className='control-button-container' >
-          <button className='control-bt'
+        <div className="relative inline-block">
+          <button
+            className="h-full px-4 py-2 rounded bg-neutral-900 text-white hover:bg-neutral-600 transition"
             onClick={() => {
               const playerUrl = getPlayerUrl(streamSession, roomParam)
               if (openLinkOnShare) {
@@ -329,18 +333,23 @@ function App() {
             Share
           </button>
         </div>
-        <div className='control-button-container' >
-          <button className='control-bt'
-            onClick={() => { switchMedia() }}
+        <div className="relative inline-block">
+          <button
+            className="h-full px-4 py-2 rounded bg-neutral-900 text-white hover:bg-neutral-600 transition"
+            onClick={() => {
+              switchMedia()
+            }}
           >
             {isPlayer ? 'Switch Mute' : 'Switch Media'}
           </button>
         </div>
       </div>
 
-      <div className='video-wrapper'>
-        <video id='video' muted autoPlay playsInline
-          // Add reference for Safari PiP API
+      <div className="fixed inset-0 overflow-hidden">
+        <video
+          muted
+          autoPlay
+          playsInline
           ref={(video) => {
             videoRef.current = video
             if (video) {
@@ -372,8 +381,8 @@ function App() {
               document.exitFullscreen()
             }
           }}
-        >
-        </video>
+          className="absolute top-0 left-0 w-full h-full"
+        ></video>
       </div>
 
       <ChatOverlay
@@ -388,7 +397,7 @@ function App() {
         onClose={() => setQrVisible(false)}
       />
       <LoggingOverlay show={logVisible} />
-    </>
+    </div>
   )
 }
 

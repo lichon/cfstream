@@ -44,79 +44,45 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online
     <>
       {show && (
         <div
-          style={{
-            position: 'fixed',
-            bottom: '0',
-            width: '100%',
-            maxHeight: '40%',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            color: 'white',
-            padding: '10px',
-            overflow: 'auto',
-            zIndex: 1000,
-            borderRadius: '0.5rem',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
+          className="fixed bottom-0 w-full max-h-[40%] bg-black/80 text-white p-2 overflow-auto z-[1000] rounded-lg flex flex-col"
         >
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="flex-1 overflow-y-auto">
             {messages.map((msg, index) => (
               <div
                 key={index}
-                style={{
-                  marginBottom: '8px',
-                  fontSize: '12px',
-                  fontFamily: 'monospace',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  textAlign: 'left',
-                  width: '100%',
-                }}
+                className="mb-2 text-xs font-mono whitespace-pre-wrap break-words text-left w-full"
               >
-                <span style={{ opacity: 0.7, fontSize: '12px' }}>
+                <span className="opacity-70 text-xs">
                   {new Date(msg.timestamp).toLocaleTimeString()} - {msg.sender}:{' '}
                 </span>
-                <span style={{ color: '#fff' }}>{msg.content}</span>
+                <span className="text-white">{msg.content}</span>
               </div>
             ))}
             <div ref={messagesEndRef} />
           </div>
-          <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
+          <form onSubmit={handleSubmit} className="flex gap-2">
             <input
+              name='input-chat'
               ref={inputRef}
               maxLength={144}
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onBlur={() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })}
-              style={{
-                flex: 1,
-                padding: '8px',
-                borderRadius: '0.5rem',
-                border: 'none',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                color: 'white',
-                outline: 'none',
-              }}
+              className="flex-1 p-2 rounded-lg border-none bg-white/10 text-white outline-none"
               placeholder="Type a message..."
             />
             <button
               type="submit"
-              style={{
-                marginRight: '8px',
-                padding: '8px 16px',
-                borderRadius: '0.5rem',
-                border: 'none',
-                backgroundColor: online ? '#4CAF50' : '#888',
-                color: 'white',
-                cursor: online ? 'pointer' : 'not-allowed',
-              }}
+              className={`mr-0 px-4 py-2 rounded-lg border-none ${
+                online
+                  ? 'bg-green-600 hover:bg-green-700 cursor-pointer'
+                  : 'bg-gray-500 cursor-not-allowed'
+              } text-white`}
               onClick={() => inputRef.current?.focus()}
             >
               Send
             </button>
-            <div>
-            </div>
           </form>
         </div>
       )}
