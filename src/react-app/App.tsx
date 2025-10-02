@@ -305,13 +305,13 @@ function App() {
             <div className="absolute top-full left-0 bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg z-50 min-w-[150px]">
               <button
                 onClick={() => startStream(false)}
-                className="block w-full px-3 py-2 text-left text-gray-200 hover:bg-neutral-700 transition"
+                className="block w-full px-3 py-2 text-left text-gray-200 hover:bg-neutral-700 transition rounded-lg"
               >
                 Start Camera
               </button>
               <button
                 onClick={() => startStream(true)}
-                className="block w-full px-3 py-2 text-left text-gray-200 hover:bg-neutral-700 transition"
+                className="block w-full px-3 py-2 text-left text-gray-200 hover:bg-neutral-700 transition rounded-lg"
               >
                 Start Screen
               </button>
