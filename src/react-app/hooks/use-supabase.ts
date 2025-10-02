@@ -2,6 +2,7 @@
 
 import { createClient } from '../lib/supabase'
 import { useCallback, useEffect, useState } from 'react'
+import { faker } from '@faker-js/faker'
 
 type ChannelMessageType = 'message' | 'notify' | 'presence';
 
@@ -26,10 +27,10 @@ interface ChannelConfig {
 }
 
 // for test
-const myId = window.location.pathname
+const fakeName = faker.person.firstName()
+const fakeId = crypto.randomUUID()
 const SELF_SENDER = 'Self'
 const supabase = createClient()
-const recentMessages: string[] = []
 
 export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: ChannelConfig) {
   const [channel, setChannel] = useState<ReturnType<typeof supabase.channel> | null>(null)
@@ -49,13 +50,13 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
 
     channel
       .on('broadcast', { event: 'message' }, (msg) => {
-        if (recentMessages.includes(msg.payload.id)) {
+        if (fakeId === msg.payload.id) {
           msg.payload.sender = SELF_SENDER
         }
         onChatMessage?.(msg.payload as ChannelMessage)
       })
       .on('broadcast', { event: 'notify' }, (msg) => {
-        if (recentMessages.includes(msg.payload.id)) {
+        if (fakeId === msg.payload.id) {
           msg.payload.sender = SELF_SENDER
         }
         onNotification?.(msg.payload as ChannelMessage)
@@ -85,8 +86,8 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
         }
         setIsConnected(true)
         await channel.track({
-          name: myId,
-          image: `https://api.dicebear.com/7.x/thumbs/svg?seed=${myId}`
+          name: fakeName,
+          image: `https://api.dicebear.com/7.x/thumbs/svg?seed=${fakeId}`
         })
       })
 
@@ -100,7 +101,7 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
 
   useEffect(() => {
     if (isChannelConnected) {
-      onChatMessage?.({ content: `channel connected ${roomName}`, timestamp: new Date().toISOString() })
+      onChatMessage?.({ content: `channel connected (${fakeName})` })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isChannelConnected])
@@ -109,15 +110,10 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
     async (content: string | object, type?: ChannelMessageType) => {
       if (!channel || !isChannelConnected) return
 
-      const newMsgId = crypto.randomUUID()
-      recentMessages.unshift(newMsgId)
-      if (recentMessages.length > 10) {
-        recentMessages.pop()
-      }
       const message: ChannelMessage = {
-        id: newMsgId,
+        id: fakeId,
         content,
-        sender: myId,
+        sender: fakeName,
         timestamp: new Date().toISOString(),
       }
 

@@ -79,7 +79,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online
               type="submit"
               className={`mr-0 px-4 py-2 rounded-lg border-none ${
                 online
-                  ? 'bg-green-700 hover:bg-green-600 cursor-pointer'
+                  ? 'bg-green-500 hover:bg-green-700 cursor-pointer'
                   : 'bg-gray-500 cursor-not-allowed'
               } text-white`}
               onClick={() => inputRef.current?.focus()}

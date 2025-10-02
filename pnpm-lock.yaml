@@ -14,6 +14,9 @@ importers:
       '@eyevinn/whip-web-client':
         specifier: ^1.1.6
         version: 1.1.6
+      '@faker-js/faker':
+        specifier: ^10.0.0
+        version: 10.0.0
       '@radix-ui/react-avatar':
         specifier: ^1.1.10
         version: 1.1.10(@types/react-dom@19.1.9(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -648,6 +651,10 @@ packages:
 
   '@eyevinn/whpp-client@0.1.2':
     resolution: {integrity: sha512-Mau11ykVIZudy+7Qz2tJZbV2cuj8Un7eT2QRBGFA42RPL8djfEi/RIZ+6b9C1Bc1EAppl26zoh28D8/KstFioQ==}
+
+  '@faker-js/faker@10.0.0':
+    resolution: {integrity: sha512-UollFEUkVXutsaP+Vndjxar40Gs5JL2HeLcl8xO1QAjJgOdhc3OmBFWyEylS+RddWaaBiAzH+5/17PLQJwDiLw==}
+    engines: {node: ^20.19.0 || ^22.13.0 || ^23.5.0 || >=24.0.0, npm: '>=10'}
 
   '@fastify/busboy@2.1.1':
     resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
@@ -2869,6 +2876,8 @@ snapshots:
       sdp-transform: 2.15.0
 
   '@eyevinn/whpp-client@0.1.2': {}
+
+  '@faker-js/faker@10.0.0': {}
 
   '@fastify/busboy@2.1.1': {}
 
