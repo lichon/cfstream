@@ -2,11 +2,11 @@ import React from 'react'
 
 interface VideoContainerProps {
   videoRef: React.RefObject<HTMLVideoElement | null>
-  isMoblie: boolean
+  isMobile: boolean
   onClick?: () => void
 }
 
-const StreamVideo: React.FC<VideoContainerProps> = ({ videoRef, isMoblie, onClick }) => (
+const StreamVideo: React.FC<VideoContainerProps> = ({ videoRef, isMobile, onClick }) => (
   <div className="fixed inset-0 overflow-hidden">
     <video
       muted
@@ -24,7 +24,7 @@ const StreamVideo: React.FC<VideoContainerProps> = ({ videoRef, isMoblie, onClic
           }
           video.onclick = () => {
             onClick?.()
-            if (!isMoblie) return
+            if (!isMobile) return
             if (video.paused) {
               video.controls = false
               video.play()

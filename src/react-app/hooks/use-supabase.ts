@@ -4,7 +4,7 @@ import { createClient } from '../lib/supabase'
 import { useCallback, useEffect, useState } from 'react'
 import { faker } from '@faker-js/faker'
 
-type ChannelMessageType = 'message' | 'notify' | 'presence';
+type ChannelMessageType = 'message' | 'event' | 'presence';
 
 export interface ChannelMessage {
   id?: string
@@ -55,7 +55,7 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
         }
         onChatMessage?.(msg.payload as ChannelMessage)
       })
-      .on('broadcast', { event: 'notify' }, (msg) => {
+      .on('broadcast', { event: 'event' }, (msg) => {
         if (fakeId === msg.payload.id) {
           msg.payload.sender = SELF_SENDER
         }

@@ -9,9 +9,10 @@ import { useSupabaseChannel } from './hooks/use-supabase'
 import StreamVideo from './components/stream-video'
 import LoggingOverlay from './components/logger'
 import QROverlay from './components/qr-overlay'
+import { ControlBar, ControlBarButton } from './components/control-bar'
 import { ChatMessage, ChatOverlay } from './components/chat-overlay'
 import { AvatarStack } from './components/avatar-stack'
-import { SignalPeer } from './lib/signalpeer'
+import { patchRTCPeerConnection, SignalPeer } from './lib/signalpeer'
 import { ChromeTTS } from './lib/tts'
 import { WHEPPlayer } from './lib/player'
 import { WHIPStreamer } from './lib/streamer'
@@ -27,7 +28,7 @@ const SYSTEM_LOG = 'System'
 const chatCmdList = getConfig().ui.cmdList
 const maxHistoryMessage = getConfig().ui.maxHistoryMessage
 const openLinkOnShare = getConfig().ui.openLinkOnShare
-const isMoblie = getConfig().ui.isMobilePlatform
+const isMobile = getConfig().ui.isMobilePlatform
 const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
 let ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
@@ -43,7 +44,6 @@ function App() {
   const [qrVisible, setQrVisible] = useState(false)
   const [logVisible, setLogVisible] = useState(false)
   const [chatVisible, setChatVisible] = useState(true)
-  const [showHoverMenu, setShowHoverMenu] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(false)
   const [isScreenShare, setScreenShare] = useState(false)
@@ -84,6 +84,7 @@ function App() {
   function firstLoad() {
     addChatMessage('type /? for help')
     if (isPlayer) {
+      patchRTCPeerConnection()
       startPlayer()
     }
   }
@@ -256,7 +257,6 @@ function App() {
   }
 
   async function startStream(shareScreen?: boolean) {
-    setShowHoverMenu(false)
     setScreenShare(shareScreen ?? false)
     const mediaStream = await WHIPStreamer.getMediaStream(shareScreen)
     const streamer = new WHIPStreamer({
@@ -278,74 +278,77 @@ function App() {
     setWHIPStreamer(streamer)
   }
 
+  // Added control bar buttons mirroring the top action buttons
+  const controlBarButtons: ControlBarButton[] = [
+    (
+      () => {
+        if (streamSession) {
+          return {
+            label: 'Stop',
+            onClick: () => {
+              releaseWakeLock()
+              stopStream()
+              stopPlayer()
+            },
+          }
+        }
+        if (isPlayer) {
+            return {
+              label: 'Play',
+              onClick: () => {
+                startPlayer()
+              },
+            }
+        }
+        // Not streaming and not player: provide hover menu (camera / screen)
+        return {
+          label: 'Start',
+          onClick: () => {},
+          menu: {
+            items: [
+              {
+                label: 'Start Camera',
+                onClick: () => startStream(false)
+              },
+              {
+                label: 'Start Screen',
+                onClick: () => startStream(true)
+              }
+            ],
+            openOn: 'hover',
+            align: 'left'
+          }
+        }
+      }
+    )(),
+    {
+      label: 'Share',
+      title: 'Share player link, copy to clipboard',
+      onClick: () => {
+        const playerUrl = getPlayerUrl(streamSession, roomParam)
+        if (openLinkOnShare) {
+          window.open(playerUrl, '_blank')
+        }
+        setQrVisible(true)
+        navigator.clipboard?.writeText(playerUrl)
+      },
+    },
+    {
+      label: isPlayer ? 'Switch Mute' : 'Switch Media',
+      title: isPlayer ? 'Toggle mute' : 'Switch between camera and screen',
+      onClick: () => { switchMedia() },
+    }
+  ]
+
   return (
     <div className="min-h-screen flex flex-col font-sans bg-neutral-900 text-white">
       <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 flex gap-4 bg-black/50 p-2 rounded-lg">
-        <div
-          className="relative inline-block"
-          onMouseEnter={() => setShowHoverMenu(!isPlayer && !streamSession)}
-          onMouseLeave={() => setShowHoverMenu(false)}
-        >
-          <button
-            className="base-button"
-            onClick={() => {
-              if (streamSession) {
-                releaseWakeLock()
-                stopStream()
-                stopPlayer()
-              } else {
-                // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-                isPlayer ? startPlayer() : setShowHoverMenu(true)
-              }
-            }}
-          >
-            {streamSession ? 'Stop' : isPlayer ? 'Play' : 'Start'}
-          </button>
-          {!streamSession && showHoverMenu && (
-            <div className="absolute top-full left-0 bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg z-50 min-w-[150px]">
-              <button
-                onClick={() => startStream(false)}
-                className="base-button menu-button"
-              >
-                Start Camera
-              </button>
-              <button
-                onClick={() => startStream(true)}
-                className="base-button menu-button"
-              >
-                Start Screen
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="relative inline-block">
-          <button
-            className="base-button"
-            onClick={() => {
-              const playerUrl = getPlayerUrl(streamSession, roomParam)
-              if (openLinkOnShare) {
-                window.open(playerUrl, '_blank')
-              }
-              setQrVisible(true)
-              navigator.clipboard?.writeText(playerUrl)
-            }}
-          >
-            Share
-          </button>
-        </div>
-        <div className="relative inline-block">
-          <button
-            className="base-button"
-            onClick={switchMedia}
-          >
-            {isPlayer ? 'Switch Mute' : 'Switch Media'}
-          </button>
-        </div>
+        <ControlBar buttons={controlBarButtons} />
       </div>
 
       <StreamVideo
         videoRef={videoRef}
-        isMoblie={isMoblie}
+        isMobile={isMobile}
         onClick={() => { setLogVisible(false) }}
       />
       <AvatarStack

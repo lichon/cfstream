@@ -118,13 +118,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-.base-button {
-  @apply inline-flex items-center justify-center h-full px-4 py-2 rounded-lg font-medium transition
-    focus:outline-none focus:ring-1 focus:ring-offset-1 focus:ring-neutral-500
-    bg-neutral-900 text-white hover:bg-neutral-700 active:bg-neutral-800 disabled:opacity-50;
-}
-
-.menu-button {
-  @apply w-full text-left px-4 py-2 rounded-lg bg-transparent hover:bg-neutral-700 justify-start;
-}
