@@ -17,11 +17,9 @@
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/supabase-js": "^2.58.0",
-    "@tailwindcss/vite": "^4.1.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "hono": "4.9.8",
-    "lucide-react": "^0.544.0",
     "qrcode": "1.5.4",
     "react": "19.0.0",
     "react-dom": "19.0.0",
@@ -32,6 +30,7 @@
     "@cloudflare/vite-plugin": "1.0.8",
     "@cloudflare/workers-types": "^4.20250428.0",
     "@eslint/js": "9.36.0",
+    "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^22.14.1",
     "@types/qrcode": "1.5.5",
     "@types/react": "19.0.10",
@@ -45,7 +44,7 @@
     "typescript": "5.9.2",
     "typescript-eslint": "8.44.1",
     "vite": "6.3.2",
-    "wrangler": "4.13.2"
+    "wrangler": "4.42.0"
   },
   "scripts": {
     "build": "tsc -b && vite build",
