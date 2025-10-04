@@ -42,6 +42,26 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online
     }
   }, [])
 
+  const renderMessageContent = (content: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g
+    return content.split(urlRegex).map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:underline"
+          >
+            {part}
+          </a>
+        )
+      }
+      return part
+    })
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (inputMessage.trim()) {
@@ -65,7 +85,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online
                 <span className="opacity-50">
                   {new Date(msg.timestamp).toLocaleTimeString()} - {msg.sender}:{' '}
                 </span>
-                <span className="opacity-80 text-white">{msg.content}</span>
+                <span className="opacity-80 text-white">{renderMessageContent(msg.content)}</span>
               </div>
             ))}
             <div ref={messagesEndRef} />
