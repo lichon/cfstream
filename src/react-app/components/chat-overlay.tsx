@@ -76,7 +76,7 @@ export const ChatOverlay: React.FC<ChatOverlayProps> = ({ show, messages, online
         <div
           className="fixed bottom-0 w-full max-h-[30%] bg-black/80 text-white p-2 overflow-auto z-[1000] rounded-lg flex flex-col"
         >
-          <div className="flex-1 overflow-y-auto no-scrollbar mb-2">
+          <div className={`flex-1 overflow-y-auto no-scrollbar ${messages.length > 0 ? 'mb-2' : ''}`}>
             {messages.map((msg, index) => (
               <div
                 key={index}

@@ -86,4 +86,4 @@ const AvatarStack = ({
   )
 }
 
-export { AvatarStack, avatarStackVariants }
+export { AvatarStack, avatarStackVariants } // eslint-disable-line
