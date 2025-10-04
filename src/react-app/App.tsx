@@ -340,7 +340,7 @@ function App() {
   ]
 
   return (
-    <div className="min-h-screen flex flex-col font-sans bg-neutral-900 text-white">
+    <div className="min-h-screen flex flex-col font-sans bg-neutral-900">
       <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 flex gap-4 bg-black/50 p-2 rounded-lg">
         <ControlBar buttons={controlBarButtons} />
       </div>
@@ -351,6 +351,7 @@ function App() {
         onClick={() => { setLogVisible(false) }}
       />
       <AvatarStack
+        orientation='horizontal'
         avatars={onlineMembers}
       />
       <ChatOverlay

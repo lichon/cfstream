@@ -1,3 +1,15 @@
+'use client'
+
+// Polyfill for crypto.randomUUID
+if (typeof crypto.randomUUID !== 'function') {
+  crypto.randomUUID = function randomUUID(): `${string}-${string}-${string}-${string}-${string}` {
+    // A simple fallback for non-secure contexts
+    // See: https://stackoverflow.com/a/2117523
+    return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c =>
+      (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16)
+    ) as `${string}-${string}-${string}-${string}-${string}`
+  }
+}
 
 interface IceServer {
   urls: string,
@@ -23,6 +35,7 @@ export interface AppConfig {
     selfDisplayName: string
     maxHistoryMessage: number
     openLinkOnShare: boolean
+    shareLinkHost: string
     isMobilePlatform: boolean
     cmdList: Set<string>
   }
@@ -49,6 +62,7 @@ const defaultConfig: AppConfig = {
     selfDisplayName: 'Self',
     maxHistoryMessage: 1000,
     openLinkOnShare: ['true', '1'].includes(import.meta.env.VITE_OPEN_ON_SHARE),
+    shareLinkHost: import.meta.env.VITE_SHARE_LINK_HOST,
     isMobilePlatform: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
     cmdList: new Set<string>([
       '/?',

@@ -3,6 +3,7 @@ import { getConfig } from '../config'
 const ROOM_API = getConfig().api.roomUrl
 const SESSION_API = getConfig().api.sessionUrl
 const BROADCAST_LABEL = getConfig().stream.broadcastLabel
+const SHARE_LINK_HOST = getConfig().ui.shareLinkHost
 
 interface Track {
   location: 'local' | 'remote'
@@ -43,7 +44,7 @@ export function getSessionUrl(sid?: string | null): string {
 }
 
 export function getPlayerUrl(sid?: string, name?: string): string {
-  const playerHost = window.location.host
+  const playerHost = SHARE_LINK_HOST || window.location.host
   const protocol = window.location.protocol
   if (name?.length)
     return `${protocol}//${playerHost}/watch?r=${name}`
