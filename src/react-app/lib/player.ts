@@ -125,6 +125,14 @@ export class WHEPPlayer {
       onChatMessage?.('media timeout')
       this.destroy()
     })
+    player.on('initial-connection-failed', () => {
+      onChatMessage?.('initial connection failed')
+      this.destroy()
+    })
+    player.on('peer-connection-failed', () => {
+      onChatMessage?.('peer connection failed')
+      this.destroy()
+    })
 
     onChatMessage?.(`loading ${sidParam}`)
     player.load(new URL(getSessionUrl(sidParam) + '/play')).then(() => {
