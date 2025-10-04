@@ -25,7 +25,7 @@ export interface AvatarStackProps
 
 const AvatarStack = ({
   className = '',
-  orientation = 'vertical',
+  orientation = 'horizontal',
   avatars,
   maxAvatarsAmount = 10,
   ...props
@@ -56,7 +56,10 @@ const AvatarStack = ({
               </AvatarFallback>
             </Avatar>
           </TooltipTrigger>
-          <TooltipContent className='bg-gray-200 text-black border-none shadow-lg' sideOffset={4}>
+          <TooltipContent className='bg-gray-200 text-black border-none shadow-lg'
+            sideOffset={4}
+            side={orientation === 'horizontal' ? 'right' : 'top'}
+          >
             <p>{name}</p>
           </TooltipContent>
         </Tooltip>
@@ -69,7 +72,10 @@ const AvatarStack = ({
               <AvatarFallback>+{avatars.length - shownAvatars.length}</AvatarFallback>
             </Avatar>
           </TooltipTrigger>
-          <TooltipContent className='bg-gray-200 text-black border-none shadow-lg' sideOffset={4}>
+          <TooltipContent className='bg-gray-200 text-black border-none shadow-lg'
+            sideOffset={4}
+            side={orientation === 'horizontal' ? 'right' : 'top'}
+          >
             {hiddenAvatars.map(({ name }, index) => (
               <p key={`${name}-${index}`}>{name}</p>
             ))}

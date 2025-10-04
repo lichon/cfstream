@@ -46,7 +46,7 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
       config: {
         broadcast: { self: true },
         private: false,
-        presence: { key: 'id' },
+        presence: { key: fakeId },
       }
     })
 
