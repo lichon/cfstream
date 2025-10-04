@@ -24,7 +24,12 @@ const StreamVideo: React.FC<VideoContainerProps> = ({ videoRef, isMobile, onClic
           }
           video.onclick = () => {
             onClick?.()
-            if (!isMobile) return
+            if (!video.src && !video.srcObject) {
+              return
+            }
+            if (!isMobile) {
+              return
+            }
             if (video.paused) {
               video.controls = false
               video.play()

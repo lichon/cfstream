@@ -6,11 +6,10 @@ import {
 } from './supabase'
 
 type Bindings = {
-  RTC_APP_ID: string
+  LOCAL_DEBUG: boolean
   RTC_API_URL: string
   RTC_API_TOKEN: string
   SUPABASE_URL: string
-  WEB_HOOK: string
 }
 
 interface NewSessionResponse {
@@ -299,6 +298,12 @@ app.get('/api/sessions/:sid', async (c) => {
   const status = await getSessionStatus(c, sid)
   status.subs = subs.length ? subs : []
   return c.json(status)
+})
+
+app.get('/*', (c) => {
+  if (c.env.LOCAL_DEBUG)
+    return fetch('http://localhost:5173/index.html')
+  return c.notFound()
 })
 
 // session utils
