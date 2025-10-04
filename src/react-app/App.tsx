@@ -78,8 +78,7 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Empty dependency array means this runs once on mount
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function firstLoad() {
     addChatMessage('type /? for help')

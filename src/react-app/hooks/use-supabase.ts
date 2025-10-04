@@ -29,12 +29,13 @@ interface ChannelConfig {
 // for test
 const fakeName = faker.person.firstName()
 const fakeId = crypto.randomUUID()
-const SELF_SENDER = 'Self'
 const supabase = createClient()
+const SELF_SENDER = 'Self'
 
 export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: ChannelConfig) {
   const [channel, setChannel] = useState<ReturnType<typeof supabase.channel> | null>(null)
-  const [isChannelConnected, setIsConnected] = useState(false)
+  const [initConnected, setInitConnected] = useState(false)
+  const [isChannelConnected, setChannelConnected] = useState(false)
   const [onlineMembers, setOnlineMembers] = useState<ChannelMember[]>([])
 
   useEffect(() => {
@@ -44,7 +45,8 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
     const channel = supabase.channel(`room:${roomName}:messages`, {
       config: {
         broadcast: { self: true },
-        private: false
+        private: false,
+        presence: { key: 'id' },
       }
     })
 
@@ -81,11 +83,20 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
         })
       })
       .subscribe(async (status) => {
-        if (status !== 'SUBSCRIBED') {
+        const connected = status === 'SUBSCRIBED'
+        setChannelConnected(connected)
+        if (!connected) {
+          if (status === 'CHANNEL_ERROR') {
+            setTimeout(() => {
+              channel.subscribe();
+            }, Math.floor(Math.random() * (4000)) + 1000)
+          }
           return
         }
-        setIsConnected(true)
+        // connected
+        setInitConnected(true)
         await channel.track({
+          id: fakeId,
           name: fakeName,
           image: `https://api.dicebear.com/7.x/thumbs/svg?seed=${fakeId}`
         })
@@ -96,15 +107,14 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
     return () => {
       supabase.removeChannel(channel)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []) // eslint-disable-line
 
+  // add ui log on first connection
   useEffect(() => {
-    if (isChannelConnected) {
+    if (initConnected) {
       onChatMessage?.({ content: `channel connected (${fakeName})` })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChannelConnected])
+  }, [initConnected]) // eslint-disable-line
 
   const sendChannelMessage = useCallback(
     async (content: string | object, type?: ChannelMessageType) => {
