@@ -302,8 +302,9 @@ function App() {
         // Not streaming and not player: provide hover menu (camera / screen)
         return {
           label: 'Start',
-          onClick: () => {},
-          menu: {
+          title: 'Start camera or screen share',
+          onClick: () => { if (isMobile) startStream(false) },
+          menu: isMobile ? undefined : {
             items: [
               {
                 label: 'Start Camera',

@@ -76,8 +76,8 @@ export const ControlBar: React.FC<ControlBarProps> = ({
 
   // Centralized shared styling so menu items reuse button defaults
   const sharedButtonBase = 'px-4 py-2 rounded-lg leading-tight font-medium transition-colors duration-150 select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed'
-  const sharedColorDefault = 'bg-neutral-900 text-white hover:bg-neutral-700 active:bg-neutral-800'
-  const sharedFocusStyle = 'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:ring-offset-neutral-900'
+  const sharedColorDefault = 'bg-neutral-900 text-white hover:bg-neutral-700 active:bg-neutral-800 focus:outline-none'
+  const sharedWrapStyle = 'whitespace-nowrap overflow-y-auto'
 
   const renderMenu = (btn: ControlBarButton, key: string) => {
     if (!btn.menu) return null
@@ -102,7 +102,7 @@ export const ControlBar: React.FC<ControlBarProps> = ({
             'inline-flex w-full text-left',
             sharedButtonBase,
             sharedColorDefault,
-            sharedFocusStyle
+            sharedWrapStyle
           ].join(' ')
           return (
             <li
@@ -145,7 +145,7 @@ export const ControlBar: React.FC<ControlBarProps> = ({
           'control-bar__button relative inline-flex',
           sharedButtonBase,
           sharedColorDefault,
-          sharedFocusStyle,
+          sharedWrapStyle,
           'aria-[pressed=true]:ring-1 aria-[pressed=true]:ring-blue-400',
           btn.className || ''
         ]
