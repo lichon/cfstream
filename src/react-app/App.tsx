@@ -158,7 +158,7 @@ function App() {
   }
 
   function stopPlayer() {
-    player?.destroy()
+    player?.stop()
     setPlayer(undefined)
   }
 
@@ -195,7 +195,6 @@ function App() {
         }
         await pc.setRemoteDescription({ sdp: answer, type: 'answer' })
         await Promise.all(ice.map(candidate => pc.addIceCandidate(candidate)))
-        requestWakeLock()
       },
       onChatMessage: (msg, from) => {
         addChatMessage(msg, from)
@@ -349,6 +348,12 @@ function App() {
     streamer?.switchMedia(!isScreenShare, !isFrontCamera)
   }
 
+  function startMediaStream(mediaStream: MediaStream) {
+    videoRef.current!.srcObject = mediaStream
+    // p2p mode only
+    return true
+  }
+
   function stopMediaStream() {
     if (videoRef.current?.srcObject) {
       (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop())
@@ -376,6 +381,10 @@ function App() {
       addChatMessage(`get media failed: ${(e as Error).toString()}`)
       return
     }
+    if (startMediaStream(mediaStream)) {
+      return
+    }
+
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
       videoElement: videoRef.current!,
@@ -392,8 +401,7 @@ function App() {
       onClose: () => {
       }
     })
-    videoRef.current!.srcObject = mediaStream
-    // await streamer.start(mediaStream)
+    await streamer.start(mediaStream)
     requestWakeLock()
     setStreamer(streamer)
   }

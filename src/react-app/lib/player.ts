@@ -162,16 +162,16 @@ export class WHEPPlayer {
 
     player.on('no-media', () => {
       onChatMessage?.('media timeout')
-      this.destroy()
+      this.stop()
     })
     player.on('initial-connection-failed', () => {
       onChatMessage?.('initial connection failed')
-      this.destroy()
+      this.stop()
       setTimeout(() => { this.start() }, 1000)
     })
     player.on('peer-connection-failed', () => {
       onChatMessage?.('peer connection failed')
-      this.destroy()
+      this.stop()
     })
 
     onChatMessage?.(`loading ${sidParam ?? 'p2p'}`)
@@ -197,15 +197,16 @@ export class WHEPPlayer {
   }
 
   public stop() {
+    const video = this.config.videoElement
+    if (video && video.srcObject) {
+      (video.srcObject as MediaStream).getTracks().forEach(track => track.stop())
+      video.srcObject = null
+    }
     if (this.player) {
       this.player.destroy()
       this.player = undefined
       this.playerDc = undefined
       this.config.onClose?.()
     }
-  }
-
-  public destroy() {
-    this.stop()
   }
 }
