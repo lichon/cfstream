@@ -138,7 +138,7 @@ function App() {
     await new Promise<void>((resolve) => {
       peer.onicecandidate = (event) => {
         const candidate: RTCIceCandidate | null = event.candidate
-        if (candidate) {
+        if (candidate && candidate.protocol !== 'tcp') {
           candidates.push(candidate.toJSON())
         } else {
           resolve()
