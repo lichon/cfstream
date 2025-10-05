@@ -211,7 +211,7 @@ export function useSupabaseChannel(config: ChannelConfig) {
         outgoingRequests.set(tid, { resolve, reject })
         timeoutId = setTimeout(() => {
           reject(new Error('timeout'))
-        }, 5000)
+        }, 10000)
       })
 
       console.log('sendChannelRequest', req)

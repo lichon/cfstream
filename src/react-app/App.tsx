@@ -147,9 +147,8 @@ function App() {
       // In case there are no candidates at all
       setTimeout(() => {
         console.log('timeout candidates', candidates)
-        peer.onicecandidate = null
         resolve()
-      }, 3000)
+      }, 5000)
     })
     await setLocalPromise
 
