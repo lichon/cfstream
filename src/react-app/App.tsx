@@ -32,16 +32,16 @@ const openLinkOnShare = getConfig().ui.openLinkOnShare
 const isMobile = getConfig().ui.isMobilePlatform
 const ownerDisplayName = getConfig().ui.streamOwnerDisplayName
 const selfDisplayName = getConfig().ui.selfDisplayName
+const STUN_SERVERS = getConfig().api.stunServers
 let ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
 let debugEnabled = getConfig().debug
 
 function App() {
   const ttsPlayer = useMemo(() => new ChromeTTS(), [])
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock()
-  const [streamSession, setStreamSession] = useState<string>()
-  const [whipStreamer, setWHIPStreamer] = useState<WHIPStreamer>()
-  const [whepPlayer, setWHEPPlayer] = useState<WHEPPlayer>()
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [activeSessionId, setActiveSessionId] = useState<string>()
+  const [streamer, setStreamer] = useState<WHIPStreamer>()
+  const [player, setPlayer] = useState<WHEPPlayer>()
   const [qrVisible, setQrVisible] = useState(false)
   const [logVisible, setLogVisible] = useState(false)
   const [chatVisible, setChatVisible] = useState(true)
@@ -50,10 +50,30 @@ function App() {
   const [isScreenShare, setScreenShare] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const { sendChannelMessage, isChannelConnected, onlineMembers } = useSupabaseChannel({
+  // keep latest streamer instance
+  const streamerRef = useRef(streamer)
+  useEffect(() => { streamerRef.current = streamer }, [streamer])
+
+  const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock()
+  const {
+    sendChannelMessage,
+    sendChannelRequest,
+    isChannelConnected,
+    onlineMembers
+  } = useSupabaseChannel({
     roomName: roomParam ?? '',
     onChatMessage: (msg) => {
       addChatMessage(msg.content as string, msg.sender)
+    },
+    onChannelRequest: async (req) => {
+      if (req.method !== 'connect')
+        return
+      return await connectRequestHandler(req.params)
+    },
+    onChannelEvent: (msg) => {
+      if (typeof msg.content === 'string') {
+        addChatMessage(msg.content)
+      }
     }
   })
 
@@ -90,36 +110,86 @@ function App() {
     }
   }
 
+  async function connectRequestHandler(params: unknown) {
+    const streamer = streamerRef.current
+    if (!streamer)
+      return null
+    const mediaStream = streamer.getStream()
+    if (!mediaStream)
+      return null
+
+    const { offer } = params as { offer: string }
+    const candidates: RTCIceCandidateInit[] = []
+
+    const activeSid = streamer.getStreamerSid()
+    const peer = new RTCPeerConnection({ iceServers: STUN_SERVERS })
+    peer.addTrack(mediaStream.getVideoTracks()[0])
+    peer.addTrack(mediaStream.getAudioTracks()[0])
+    peer.addEventListener('connectionstatechange', () => {
+      console.log('p2p peer', peer.connectionState)
+    })
+    peer.addEventListener('icecandidate', (event) => {
+      const ice = event.candidate ? event.candidate : null
+      console.log('p2p ice', ice?.toJSON())
+      if (ice) {
+        candidates.push(ice.toJSON())
+      }
+    })
+    const iceDone = new Promise<void>((resolve) => {
+      peer.addEventListener('icegatheringstatechange', () => {
+        console.log('p2p ice gathering', peer.iceGatheringState)
+        if (peer.iceGatheringState === 'complete') {
+          resolve()
+        }
+      })
+      // in case icegatheringstatechange not fired
+      const timeoutId = setTimeout(() => {
+        console.log('p2p ice gathering timeout')
+        resolve()
+      }, 5000)
+      if (peer.iceGatheringState === 'complete') {
+        clearTimeout(timeoutId)
+        resolve()
+      }
+    })
+    // peer.restartIce()
+    await iceDone
+
+    await peer.setRemoteDescription({ sdp: offer, type: 'offer' })
+    await peer.setLocalDescription(await peer.createAnswer())
+    return { sid: activeSid, answer: peer.localDescription?.sdp, ice: candidates }
+  }
+
   function stopPlayer() {
-    whepPlayer?.destroy()
-    setWHEPPlayer(undefined)
+    player?.destroy()
+    setPlayer(undefined)
   }
 
   async function startPlayer() {
-    if (whepPlayer)
+    if (player)
       return
 
     if (!roomParam?.length && !sidParam?.length) {
       return
     }
 
-    const player = new WHEPPlayer({
+    const whep = new WHEPPlayer({
       videoElement: videoRef.current!,
       onChatMessage: (message: string, from?: string) => {
         addChatMessage(message, from)
       },
       onOpen: (sid: string) => {
         requestWakeLock()
-        setStreamSession(sid)
+        setActiveSessionId(sid)
       },
       onClose: () => {
         releaseWakeLock()
-        setWHEPPlayer(undefined)
-        setStreamSession(undefined)
+        setPlayer(undefined)
+        setActiveSessionId(undefined)
       },
     })
-    await player.start(sidParam, roomParam)
-    setWHEPPlayer(player)
+    await whep.start(sidParam, roomParam)
+    setPlayer(whep)
   }
 
   async function handleCmd(text: string) {
@@ -136,6 +206,17 @@ function App() {
         WHIPStreamer.enableDebug(debugEnabled)
         addChatMessage(`debug enabled ${debugEnabled}`)
         break
+      case '/t':
+      case '/test': {
+        addChatMessage('test command')
+        const res = await sendChannelRequest({ method: 'connect' })
+        if (res.error) {
+          addChatMessage(`error: ${res.error}`)
+        } else {
+          addChatMessage(`response: ${JSON.stringify(res.data)}`)
+        }
+        break
+      }
       case '/buffer':
         // TODO config player buffer
         break
@@ -164,8 +245,12 @@ function App() {
         v.requestPictureInPicture()
         break
       case '/tts':
-        ttsEnabled = !ttsEnabled && ChromeTTS.isSupported()
-        addChatMessage(`tts enabled ${ttsEnabled}`)
+        if (!ChromeTTS.isSupported()) {
+          addChatMessage('TTS not supported')
+          break
+        }
+        ttsEnabled = !ttsEnabled
+        addChatMessage(`TTS enabled ${ttsEnabled}`)
         break
       case '/input':
         ttsPlayer.pipInput(false, onTextSubmit)
@@ -200,13 +285,13 @@ function App() {
   // @ts-expect-error keep
   function _sendDcMessage(text: string) {
     const msgObject = SignalPeer.newChatMsg(text)
-    const playerDc = whepPlayer?.getPlayerDc()
+    const playerDc = player?.getPlayerDc()
     if (playerDc) {
-      msgObject.sender = whepPlayer?.getPlayerSid()
+      msgObject.sender = player?.getPlayerSid()
       SignalPeer.send(playerDc, msgObject)
       return
     }
-    const streamerDc = whipStreamer?.getStreamerDc()
+    const streamerDc = streamer?.getStreamerDc()
     if (streamerDc) {
       msgObject.sender = ownerDisplayName
       SignalPeer.send(streamerDc, msgObject, () => {
@@ -247,23 +332,29 @@ function App() {
     }
     setIsFrontCamera(!isFrontCamera)
     setScreenShare(!isScreenShare)
-    whipStreamer?.switchMedia(!isScreenShare, !isFrontCamera)
+    streamer?.switchMedia(!isScreenShare, !isFrontCamera)
   }
 
   async function stopStream() {
-    if (whipStreamer) {
+    if (streamer) {
       try {
-        await whipStreamer.stop()
+        await streamer.stop()
       } finally {
-        setWHIPStreamer(undefined)
-        setStreamSession(undefined)
+        setStreamer(undefined)
+        setActiveSessionId(undefined)
       }
     }
   }
 
   async function startStream(shareScreen?: boolean) {
     setScreenShare(shareScreen ?? false)
-    const mediaStream = await WHIPStreamer.getMediaStream(shareScreen)
+    let mediaStream: MediaStream
+    try {
+      mediaStream = await WHIPStreamer.getMediaStream(shareScreen)
+    } catch (e) {
+      addChatMessage(`get media failed: ${(e as Error).toString()}`)
+      return
+    }
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
       videoElement: videoRef.current!,
@@ -271,26 +362,25 @@ function App() {
         addChatMessage(message, from)
       },
       onOpen: (sid) => {
-        setStreamSession(sid)
+        setActiveSessionId(sid)
         if (roomParam) {
           const watchUrl = getPlayerUrl(sid, roomParam)
-          sendChannelMessage(`new stream: ${watchUrl}`)
+          sendChannelMessage(`new stream: ${watchUrl}`, 'event')
         }
       },
       onClose: () => {
-        // addChatMessage('client closed')
       }
     })
     await streamer.start(mediaStream)
     requestWakeLock()
-    setWHIPStreamer(streamer)
+    setStreamer(streamer)
   }
 
   // Added control bar buttons mirroring the top action buttons
   const controlBarButtons: ControlBarButton[] = [
     (
       () => {
-        if (streamSession) {
+        if (activeSessionId) {
           return {
             label: 'Stop',
             onClick: () => {
@@ -343,7 +433,7 @@ function App() {
       ),
       title: 'Share player link, copy to clipboard',
       onClick: () => {
-        const playerUrl = getPlayerUrl(streamSession, roomParam)
+        const playerUrl = getPlayerUrl(activeSessionId, roomParam)
         if (openLinkOnShare) {
           window.open(playerUrl, '_blank')
         }
@@ -382,7 +472,7 @@ function App() {
         onSubmit={(text: string) => onTextSubmit(text)}
       />
       <QROverlay
-        url={`${getPlayerUrl(streamSession, roomParam)}`}
+        url={`${getPlayerUrl(activeSessionId, roomParam)}`}
         show={qrVisible}
         onClose={() => setQrVisible(false)}
       />

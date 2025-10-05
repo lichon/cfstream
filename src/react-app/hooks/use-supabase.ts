@@ -4,12 +4,26 @@ import { createClient } from '../lib/supabase'
 import { useCallback, useEffect, useState } from 'react'
 import { faker } from '@faker-js/faker'
 
-type ChannelMessageType = 'message' | 'event' | 'presence';
+type ChannelMessageType = 'message' | 'event' | 'command'
+
+type ChannelRequestMethod = 'ping' | 'connect'
+
+export interface ChannelRequest {
+  tid?: string
+  method: ChannelRequestMethod
+  params?: unknown
+}
+
+export interface ChannelResponse {
+  tid?: string
+  data?: unknown
+  error?: string
+}
 
 export interface ChannelMessage {
-  id?: string
+  id?: string // message sender id
   type?: ChannelMessageType
-  content: string | object
+  content: unknown // updated type
   timestamp?: string
   sender?: string
 }
@@ -22,31 +36,34 @@ interface ChannelMember {
 
 interface ChannelConfig {
   roomName: string
-  onNotification?: (msg: ChannelMessage) => void
+  onChannelEvent?: (msg: ChannelMessage) => void
+  onChannelRequest?: (req: ChannelRequest) => Promise<unknown>
   onChatMessage?: (msg: ChannelMessage) => void
 }
 
-// for test
 const fakeName = faker.person.firstName()
 const fakeId = crypto.randomUUID()
 const supabase = createClient()
 const SELF_SENDER = 'Self'
 
-export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: ChannelConfig) {
+// cache of outgoing requests' resolvers
+const outgoingRequests = new Map<string, { resolve: (data: unknown) => void, reject: (err: Error) => void }>()
+
+export function useSupabaseChannel(config: ChannelConfig) {
   const [channel, setChannel] = useState<ReturnType<typeof supabase.channel> | null>(null)
   const [initConnected, setInitConnected] = useState(false)
   const [isChannelConnected, setChannelConnected] = useState(false)
   const [onlineMembers, setOnlineMembers] = useState<ChannelMember[]>([])
 
   useEffect(() => {
-    if (!roomName?.length) {
+    if (!config.roomName?.length) {
       return
     }
-    const channel = supabase.channel(`room:${roomName}:messages`, {
+    const channel = supabase.channel(`room:${config.roomName}:messages`, {
       config: {
         broadcast: { self: true },
-        private: false,
         presence: { key: fakeId },
+        private: false,
       }
     })
 
@@ -55,13 +72,17 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
         if (fakeId === msg.payload.id) {
           msg.payload.sender = SELF_SENDER
         }
-        onChatMessage?.(msg.payload as ChannelMessage)
+        config.onChatMessage?.(msg.payload as ChannelMessage)
       })
       .on('broadcast', { event: 'event' }, (msg) => {
         if (fakeId === msg.payload.id) {
           msg.payload.sender = SELF_SENDER
         }
-        onNotification?.(msg.payload as ChannelMessage)
+        config.onChannelEvent?.(msg.payload as ChannelMessage)
+      })
+      .on('broadcast', { event: 'command' }, (msg) => {
+        console.log('command', msg)
+        channelCommandHandler(msg.payload as ChannelMessage, channel)
       })
       .on('presence', { event: 'sync'}, () => {
         const newState = channel.presenceState<ChannelMember>()
@@ -74,12 +95,12 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
       })
       .on('presence', { event: 'join'}, (e) => {
         e.newPresences.map(p => {
-          console.log(`${roomName} ${p.name} joined`)
+          console.log(`${p.name} joined`)
         })
       })
       .on('presence', { event: 'leave'}, (e) => {
         e.leftPresences.map(p => {
-          console.log(`${roomName} ${p.name} left`)
+          console.log(`${p.name} left`)
         })
       })
       .subscribe(async (status) => {
@@ -112,21 +133,115 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
   // add ui log on first connection
   useEffect(() => {
     if (initConnected) {
-      onChatMessage?.({ content: `channel connected (${fakeName})` })
+      config.onChatMessage?.({ content: `channel connected (${fakeName})` })
     }
   }, [initConnected]) // eslint-disable-line
 
-  const sendChannelMessage = useCallback(
-    async (content: string | object, type?: ChannelMessageType) => {
-      if (!channel || !isChannelConnected) return
+  const newMessage = function (content: string | object): ChannelMessage {
+    const message: ChannelMessage = {
+      id: fakeId,
+      content: content,
+      sender: fakeName,
+      timestamp: new Date().toISOString(),
+    }
+    return message
+  }
 
-      const message: ChannelMessage = {
-        id: fakeId,
-        content,
-        sender: fakeName,
-        timestamp: new Date().toISOString(),
+  const channelCommandHandler = async (cmd: ChannelMessage, ch: typeof channel) => {
+    const req = cmd.content as ChannelRequest
+    if (fakeId === cmd.id) {
+      console.log('ignore self command', req)
+      return
+    }
+    if (!req.method?.length) {
+      const res = cmd.content as ChannelResponse
+      const handlers = outgoingRequests.get(res.tid!)
+      if (!handlers) {
+        return
+      }
+      if (res.error) {
+        handlers.reject(new Error(res.error))
+      } else {
+        handlers.resolve(res.data)
+      }
+      return
+    }
+
+    console.log('handle request', req.method)
+    switch (req.method) {
+      case 'ping':
+        _sendChannelResponse({ tid: req.tid, data: 'pong' }, ch)
+        break
+      default:
+        try {
+          const res = await config.onChannelRequest?.(req)
+          if (!res)
+            return
+          _sendChannelResponse({ tid: req.tid, data: res }, ch)
+        } catch (e) {
+          const error = e instanceof Error ? e.message : 'unknown error'
+          _sendChannelResponse({ tid: req.tid, error }, ch)
+        }
+        break
+    }
+  }
+
+  const _sendChannelResponse = async (res: ChannelResponse, ch: typeof channel) => {
+    console.log('sendChannelResponse called', channel, isChannelConnected)
+    config.onChatMessage?.({ content: `send response: ${JSON.stringify(res)}` })
+    await ch?.send({
+      type: 'broadcast',
+      event: 'command',
+      payload: newMessage(res),
+    })
+  }
+
+  const sendChannelRequest = useCallback(
+    async (req: ChannelRequest): Promise<ChannelResponse> => {
+      if (!req.tid?.length) {
+        req.tid = crypto.randomUUID()
+      }
+      const tid = req.tid
+
+      if (!channel || !isChannelConnected) {
+        return { tid, error: 'not connected' } as ChannelResponse
       }
 
+      let timeoutId: NodeJS.Timeout
+      const response = new Promise((resolve, reject) => {
+        outgoingRequests.set(tid, { resolve, reject })
+        timeoutId = setTimeout(() => {
+          reject(new Error('timeout'))
+        }, 30000)
+      })
+
+      await channel.send({
+        type: 'broadcast',
+        event: 'command',
+        payload: newMessage(req),
+      })
+
+      try {
+        const data = await response
+        clearTimeout(timeoutId!)
+        return { data } as ChannelResponse
+      } catch (e) {
+        const error = e instanceof Error ? e.message : 'unknown error'
+        return { error } as ChannelResponse
+      } finally {
+        console.log('outgoing request clean up', tid)
+        outgoingRequests.delete(tid)
+      }
+    },
+    [channel, isChannelConnected]
+  )
+
+  const sendChannelMessage = useCallback(
+    async (content: string | object, type?: ChannelMessageType) => {
+      if (!channel || !isChannelConnected)
+        return
+
+      const message = newMessage(content)
       await channel.send({
         type: 'broadcast',
         event: type || 'message',
@@ -136,5 +251,10 @@ export function useSupabaseChannel({ roomName, onChatMessage, onNotification }: 
     [channel, isChannelConnected]
   )
 
-  return { sendChannelMessage, isChannelConnected, onlineMembers }
+  return {
+    sendChannelMessage,
+    sendChannelRequest,
+    isChannelConnected,
+    onlineMembers
+  }
 }

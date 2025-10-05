@@ -12,6 +12,8 @@ const LOG_TAG = 'Player'
 
 export interface PlayerConfig {
   videoElement: HTMLVideoElement
+  preferP2p?: boolean
+  onLocalOffer?: (offer: RTCSessionDescriptionInit) => void
   onChatMessage?: (message: string, from?: string) => void
   onOpen?: (sid: string) => void
   onClose?: () => void
@@ -116,9 +118,36 @@ export class WHEPPlayer {
     const player = new WebRTCPlayer({
       debug: debug,
       video: videoElement,
-      type: 'whep',
+      type: this.config.preferP2p ? 'custom' : 'whep',
       statsTypeFilter: '^inbound-rtp',
       iceServers: stunServers,
+      adapterFactory: (peer, _url, _onError, _mediaConstraints, _authKey) => {
+        let playerPeer = peer
+        return {
+          enableDebug: () => { },
+          getPeer: () => playerPeer,
+          resetPeer: (newPeer: RTCPeerConnection) => {
+            playerPeer = newPeer
+            playerPeer.oniceconnectionstatechange = () => {
+            }
+            playerPeer.onicecandidate = (event) => {
+              const candidateEvent = <RTCPeerConnectionIceEvent>event;
+              const candidate: RTCIceCandidate | null = candidateEvent.candidate;
+              console.log(candidate)
+            }
+          },
+          connect: async () => {
+            playerPeer.addTransceiver('video', { direction: 'recvonly' })
+            playerPeer.addTransceiver('audio', { direction: 'recvonly' })
+            const offer = await playerPeer.createOffer()
+            await playerPeer.setLocalDescription(offer)
+            this.config.onLocalOffer?.(offer)
+          },
+          disconnect: async () => {
+            playerPeer?.close()
+          }
+        }
+      },
     })
 
     player.on('no-media', () => {

@@ -7,12 +7,12 @@ import {
 
 let debug = getConfig().debug
 const broadcastInterval = getConfig().stream.broadcastInterval
-const SIGNAL_LABEL = getConfig().stream.signalLabel;
-const STUN_SERVERS = getConfig().api.stunServers;
-const SIGNAL_TAG = 'SignalPeer';
-const DC_TAG = 'SignalDc';
+const SIGNAL_LABEL = getConfig().stream.signalLabel
+const STUN_SERVERS = getConfig().api.stunServers
+const SIGNAL_TAG = 'SignalPeer'
+const DC_TAG = 'SignalDc'
 
-const OriginalRTCPeerConnection = window.RTCPeerConnection;
+const OriginalRTCPeerConnection = window.RTCPeerConnection
 export const patchRTCPeerConnection = () => {
   // Create a new constructor function that wraps the original
   const patchedConstructor: typeof RTCPeerConnection = function (
@@ -35,45 +35,45 @@ export const patchRTCPeerConnection = () => {
   patchedConstructor.generateCertificate = OriginalRTCPeerConnection.generateCertificate
 
   // Replace the global RTCPeerConnection
-  window.RTCPeerConnection = patchedConstructor;
+  window.RTCPeerConnection = patchedConstructor
   console.log('peerconnection patched')
 }
 
-type MessageCallback = (sid: string, message: MessageEvent) => void;
-type StatusCallback = (sid: string) => void;
-type NotifyCallback = () => void;
+type MessageCallback = (sid: string, message: MessageEvent) => void
+type StatusCallback = (sid: string) => void
+type NotifyCallback = () => void
 
-type SignalMessageType = 'signal' | 'chat' | 'rpc';
-type SignalStatus = 'waiting' | 'connected' | 'disconnected';
+type SignalMessageType = 'signal' | 'chat' | 'rpc'
+type SignalStatus = 'waiting' | 'connected' | 'disconnected'
 
 export interface SignalEvent {
-  sid: string;
-  status: SignalStatus;
+  sid: string
+  status: SignalStatus
 }
 
 export interface SignalMessage {
-  type: SignalMessageType;
-  content: unknown;
-  sender?: string;
+  type: SignalMessageType
+  content: unknown
+  sender?: string
 }
 
 export class SignalPeer {
-  private config: RTCConfiguration;
-  private bootstrapPeer: RTCPeerConnection | null = null;
-  private signalPeer: RTCPeerConnection | null = null;
-  private signalDcMap: Map<string, RTCDataChannel> = new Map<string, RTCDataChannel>();
-  private onMessageCallback: MessageCallback | null = null;
-  private onOpenCallback: StatusCallback | null = null;
-  private onCloseCallback: StatusCallback | null = null;
-  private onBootstrapCallback: NotifyCallback | null = null;
-  private onBootstrapKickedCallback: NotifyCallback | null = null;
+  private config: RTCConfiguration
+  private bootstrapPeer: RTCPeerConnection | null = null
+  private signalPeer: RTCPeerConnection | null = null
+  private signalDcMap: Map<string, RTCDataChannel> = new Map<string, RTCDataChannel>()
+  private onMessageCallback: MessageCallback | null = null
+  private onOpenCallback: StatusCallback | null = null
+  private onCloseCallback: StatusCallback | null = null
+  private onBootstrapCallback: NotifyCallback | null = null
+  private onBootstrapKickedCallback: NotifyCallback | null = null
 
-  private bootstrapSid: string | undefined;
-  private signalSid: string | undefined;
-  private closed: boolean = false;
+  private bootstrapSid: string | undefined
+  private signalSid: string | undefined
+  private closed: boolean = false
 
   constructor(config: RTCConfiguration = { iceServers: STUN_SERVERS }) {
-    this.config = config;
+    this.config = config
   }
 
   static label = SIGNAL_LABEL
@@ -265,15 +265,15 @@ export class SignalPeer {
   }
 
   onMessage(callback: MessageCallback): void {
-    this.onMessageCallback = callback;
+    this.onMessageCallback = callback
   }
 
   onOpen(callback: StatusCallback): void {
-    this.onOpenCallback = callback;
+    this.onOpenCallback = callback
   }
 
   onClose(callback: StatusCallback): void {
-    this.onCloseCallback = callback;
+    this.onCloseCallback = callback
   }
 
   // activeSid would expire in server side
