@@ -110,18 +110,16 @@ function App() {
   }
 
   async function connectRequestHandler(tid: string, params: unknown) {
-    console.log('handle p2p request', params)
-    let mediaStream = videoRef.current?.srcObject as MediaStream | null
+    const mediaStream = videoRef.current?.srcObject as MediaStream | null
     if (!mediaStream) {
-      mediaStream = await WHIPStreamer.getMediaStream(false)
+      return
     }
-    videoRef.current!.srcObject = mediaStream
-
+    console.log('handle p2p request', params)
     const { offer, ice } = params as { offer: string, ice: RTCIceCandidateInit[] }
     if (!offer?.length) {
       return
     }
-    const peer = new RTCPeerConnection({ iceServers: STUN_SERVERS, bundlePolicy: 'max-bundle' })
+    const peer = new RTCPeerConnection({ iceServers: STUN_SERVERS })
     peer.addTrack(mediaStream.getAudioTracks()[0])
     peer.addTrack(mediaStream.getVideoTracks()[0])
     peer.onconnectionstatechange = (() => {
@@ -133,7 +131,6 @@ function App() {
     const candidates: RTCIceCandidateInit[] = []
     await new Promise<void>((resolve) => {
       peer.onicecandidate = (event) => {
-        console.log('onicecandidate', event.candidate)
         const candidate: RTCIceCandidate | null = event.candidate
         if (candidate) {
           candidates.push(candidate.toJSON())
