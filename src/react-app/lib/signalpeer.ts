@@ -129,7 +129,7 @@ export class SignalPeer {
   }
 
   // create new signal dc subs to remote session
-  async newSignalDc(remoteSid: string) {
+  async newSubscribe(remoteSid: string) {
     if (!this.signalPeer || !this.signalSid) {
       console.log(DC_TAG, 'signal peer not ready')
       return

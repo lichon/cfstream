@@ -34,11 +34,10 @@ const QROverlay = ({ url, show, onClose }: QROverlayProps) => {
       onClick={onClose}
     >
       <div
-        className="bg-white p-4 pb-0 rounded-lg text-center"
+        className="bg-white p-4 rounded-lg text-center"
         onClick={e => e.stopPropagation()}
       >
         <canvas id="qrCode"></canvas>
-        <p className="m-0 text-gray-500 text-sm">Click anywhere to close</p>
       </div>
     </div>
   );

@@ -185,7 +185,7 @@ export class WHIPStreamer {
       clearTimeout(broadcastTimeout)
       // bootstrap kicked, connect signal to new sub
       getSessionInfo(sessionId).then(info => {
-        info.subs.forEach(sid => signalPeer.newSignalDc(sid))
+        info.subs.forEach(sid => signalPeer.newSubscribe(sid))
         signalPeer.clearInvalidDc(info.subs)
       })
     })
