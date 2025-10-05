@@ -81,7 +81,6 @@ export function useSupabaseChannel(config: ChannelConfig) {
         config.onChannelEvent?.(msg.payload as ChannelMessage)
       })
       .on('broadcast', { event: 'command' }, (msg) => {
-        console.log('command', msg)
         channelCommandHandler(msg.payload as ChannelMessage, channel)
       })
       .on('presence', { event: 'sync'}, () => {
@@ -150,7 +149,7 @@ export function useSupabaseChannel(config: ChannelConfig) {
   const channelCommandHandler = async (cmd: ChannelMessage, ch: typeof channel) => {
     const req = cmd.content as ChannelRequest
     if (fakeId === cmd.id) {
-      console.log('ignore self command', req)
+      // ignore commands from self
       return
     }
     if (!req.method?.length) {
@@ -159,6 +158,7 @@ export function useSupabaseChannel(config: ChannelConfig) {
       if (!handlers) {
         return
       }
+      console.log('recvChannelResponse', cmd.content)
       if (res.error) {
         handlers.reject(new Error(res.error))
       } else {
@@ -167,28 +167,27 @@ export function useSupabaseChannel(config: ChannelConfig) {
       return
     }
 
-    console.log('handle request', req.method)
     switch (req.method) {
       case 'ping':
-        _sendChannelResponse({ tid: req.tid, data: 'pong' }, ch)
+        sendChannelResponse({ tid: req.tid, data: 'pong' }, ch)
         break
       default:
         try {
           const res = await config.onChannelRequest?.(req)
           if (!res)
             return
-          _sendChannelResponse({ tid: req.tid, data: res }, ch)
+          console.log('handleChannelRequest', req)
+          sendChannelResponse({ tid: req.tid, data: res }, ch)
         } catch (e) {
           const error = e instanceof Error ? e.message : 'unknown error'
-          _sendChannelResponse({ tid: req.tid, error }, ch)
+          sendChannelResponse({ tid: req.tid, error }, ch)
         }
         break
     }
   }
 
-  const _sendChannelResponse = async (res: ChannelResponse, ch: typeof channel) => {
-    console.log('sendChannelResponse called', channel, isChannelConnected)
-    config.onChatMessage?.({ content: `send response: ${JSON.stringify(res)}` })
+  const sendChannelResponse = async (res: ChannelResponse, ch: typeof channel) => {
+    console.log('sendChannelResponse', res)
     await ch?.send({
       type: 'broadcast',
       event: 'command',
@@ -204,7 +203,7 @@ export function useSupabaseChannel(config: ChannelConfig) {
       const tid = req.tid
 
       if (!channel || !isChannelConnected) {
-        return { tid, error: 'not connected' } as ChannelResponse
+        return { tid, error: 'channel not connected' } as ChannelResponse
       }
 
       let timeoutId: NodeJS.Timeout
@@ -215,6 +214,7 @@ export function useSupabaseChannel(config: ChannelConfig) {
         }, 30000)
       })
 
+      console.log('sendChannelRequest', req)
       await channel.send({
         type: 'broadcast',
         event: 'command',

@@ -213,10 +213,6 @@ export class WHIPStreamer {
     this.signalPeer = signalPeer
   }
 
-  getStream(): MediaStream | undefined {
-    return this.config.videoElement.srcObject as MediaStream
-  }
-
   getStreamerSid(): string | undefined {
     return this.streamerSid
   }

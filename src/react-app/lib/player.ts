@@ -12,8 +12,7 @@ const LOG_TAG = 'Player'
 
 export interface PlayerConfig {
   videoElement: HTMLVideoElement
-  preferP2p?: boolean
-  onLocalOffer?: (offer: RTCSessionDescriptionInit) => void
+  onLocalOffer?: (pc: RTCPeerConnection, candidates: RTCIceCandidateInit[]) => Promise<void>
   onChatMessage?: (message: string, from?: string) => void
   onOpen?: (sid: string) => void
   onClose?: () => void
@@ -23,7 +22,6 @@ export class WHEPPlayer {
   private player?: WebRTCPlayer
   private playerDc?: RTCDataChannel
   private playerSid?: string
-  private playingStream?: string
   private config: PlayerConfig
   private signalConnected = false
   private lastKick = 0
@@ -107,44 +105,57 @@ export class WHEPPlayer {
 
     if (nameParam?.length) {
       sidParam = await getSessionByName(nameParam)
-      if (!sidParam?.length) {
-        onChatMessage?.('loading session not found')
-        return
-      }
     }
-
-    if (!sidParam?.length) return
 
     const player = new WebRTCPlayer({
       debug: debug,
       video: videoElement,
-      type: this.config.preferP2p ? 'custom' : 'whep',
+      type: sidParam?.length ? 'whep' : 'custom',
       statsTypeFilter: '^inbound-rtp',
       iceServers: stunServers,
-      adapterFactory: (peer, _url, _onError, _mediaConstraints, _authKey) => {
-        let playerPeer = peer
+      adapterFactory: (playerPeer, _url, _onError, _mediaConstraints, _authKey) => {
+        let peer = playerPeer
         return {
           enableDebug: () => { },
-          getPeer: () => playerPeer,
-          resetPeer: (newPeer: RTCPeerConnection) => {
-            playerPeer = newPeer
-            playerPeer.oniceconnectionstatechange = () => {
-            }
-            playerPeer.onicecandidate = (event) => {
-              const candidateEvent = <RTCPeerConnectionIceEvent>event;
-              const candidate: RTCIceCandidate | null = candidateEvent.candidate;
-              console.log(candidate)
-            }
-          },
+          getPeer: () => peer,
+          resetPeer: (newPeer: RTCPeerConnection) => { peer = newPeer },
           connect: async () => {
-            playerPeer.addTransceiver('video', { direction: 'recvonly' })
-            playerPeer.addTransceiver('audio', { direction: 'recvonly' })
-            const offer = await playerPeer.createOffer()
-            await playerPeer.setLocalDescription(offer)
-            this.config.onLocalOffer?.(offer)
+            const stream = videoElement.srcObject as MediaStream | null
+            if (stream) {
+              stream.getTracks().forEach(t => t.stop())
+            }
+            console.log('connect with channel rpc')
+            const newStream = new MediaStream()
+            peer.ontrack = (event) => {
+              if (!event.track) return
+              newStream.addTrack(event.track)
+              if (!videoElement.srcObject) {
+                videoElement.srcObject = newStream
+              }
+            }
+            // prepare offer
+            peer.addTransceiver('video', { direction: 'recvonly' })
+            peer.addTransceiver('audio', { direction: 'recvonly' })
+            const setLocalPromise = peer.setLocalDescription(await peer.createOffer())
+            // ice candidates gathering after setLocalDescription
+            const candidates: RTCIceCandidateInit[] = []
+            await new Promise<void>((resolve) => {
+              peer.onicecandidate = (event) => {
+                const candidate: RTCIceCandidate | null = event.candidate
+                if (candidate && candidate.protocol !== 'tcp') {
+                  candidates.push(candidate.toJSON())
+                } else if (!candidate) {
+                  resolve()
+                }
+              }
+              // In case there are no candidates at all
+              setTimeout(() => resolve(), 1000)
+            })
+            await setLocalPromise
+            this.config.onLocalOffer?.(peer, candidates)
           },
           disconnect: async () => {
-            playerPeer?.close()
+            peer?.close()
           }
         }
       },
@@ -157,6 +168,7 @@ export class WHEPPlayer {
     player.on('initial-connection-failed', () => {
       onChatMessage?.('initial connection failed')
       this.destroy()
+      setTimeout(() => { this.start() }, 1000)
     })
     player.on('peer-connection-failed', () => {
       onChatMessage?.('peer connection failed')
@@ -166,18 +178,14 @@ export class WHEPPlayer {
     onChatMessage?.(`loading ${sidParam}`)
     player.load(new URL(getSessionUrl(sidParam) + '/play')).then(() => {
       const playerObj = player as never
-      const playerAdapter = playerObj['adapter'] as never
-      const localPeer = playerAdapter['localPeer'] as never
-      const bootstrapDc = localPeer['bootstrapDc'] as RTCDataChannel
-      const peer = localPeer as RTCPeerConnection
+      const peer = playerObj['peer'] as never
+      const bootstrapDc = peer['bootstrapDc'] as RTCDataChannel
 
       bootstrapDc.onopen = () => {
         this.jitterBufferConfig(peer)
-        // this.initPlayerSignal(peer, playerAdapter, sidParam)
-        onOpen?.(sidParam)
+        sidParam ?? onOpen?.(sidParam!) // eslint-disable-line
       }
     })
-    this.playingStream = sidParam
     this.player = player
   }
 
@@ -187,10 +195,6 @@ export class WHEPPlayer {
 
   public getPlayerSid() {
     return this.playerSid
-  }
-
-  public getPlayingStream() {
-    return this.playingStream
   }
 
   public stop() {

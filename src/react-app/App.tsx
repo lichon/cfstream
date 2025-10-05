@@ -18,7 +18,6 @@ import { WHEPPlayer } from './lib/player'
 import { WHIPStreamer } from './lib/streamer'
 import { getPlayerUrl } from './lib/api'
 
-let _firstLoad = true
 const urlParams = new URLSearchParams(window.location.search)
 const sidParam = urlParams.get('s') || undefined
 const roomParam = urlParams.get('r') || undefined
@@ -35,6 +34,7 @@ const selfDisplayName = getConfig().ui.selfDisplayName
 const STUN_SERVERS = getConfig().api.stunServers
 let ttsEnabled = getConfig().ui.ttsEnabled && ChromeTTS.isSupported()
 let debugEnabled = getConfig().debug
+let _firstLoad = true
 
 function App() {
   const ttsPlayer = useMemo(() => new ChromeTTS(), [])
@@ -50,10 +50,6 @@ function App() {
   const [isScreenShare, setScreenShare] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  // keep latest streamer instance
-  const streamerRef = useRef(streamer)
-  useEffect(() => { streamerRef.current = streamer }, [streamer])
-
   const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock()
   const {
     sendChannelMessage,
@@ -68,7 +64,7 @@ function App() {
     onChannelRequest: async (req) => {
       if (req.method !== 'connect')
         return
-      return await connectRequestHandler(req.params)
+      return await connectRequestHandler(req.tid!, req.params)
     },
     onChannelEvent: (msg) => {
       if (typeof msg.content === 'string') {
@@ -102,62 +98,59 @@ function App() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function firstLoad() {
-    addChatMessage('type /? for help')
-    if (isPlayer) {
+  useEffect(() => {
+    if (isChannelConnected && isPlayer) {
       patchRTCPeerConnection()
       startPlayer()
     }
+  }, [isChannelConnected]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function firstLoad() {
+    addChatMessage('type /? for help')
   }
 
-  async function connectRequestHandler(params: unknown) {
-    const streamer = streamerRef.current
-    if (!streamer)
-      return null
-    const mediaStream = streamer.getStream()
-    if (!mediaStream)
-      return null
+  async function connectRequestHandler(tid: string, params: unknown) {
+    console.log('handle p2p request', params)
+    let mediaStream = videoRef.current?.srcObject as MediaStream | null
+    if (!mediaStream) {
+      mediaStream = await WHIPStreamer.getMediaStream(false)
+    }
+    videoRef.current!.srcObject = mediaStream
 
-    const { offer } = params as { offer: string }
-    const candidates: RTCIceCandidateInit[] = []
-
-    const activeSid = streamer.getStreamerSid()
-    const peer = new RTCPeerConnection({ iceServers: STUN_SERVERS })
-    peer.addTrack(mediaStream.getVideoTracks()[0])
+    const { offer, ice } = params as { offer: string, ice: RTCIceCandidateInit[] }
+    if (!offer?.length) {
+      return
+    }
+    const peer = new RTCPeerConnection({ iceServers: STUN_SERVERS, bundlePolicy: 'max-bundle' })
     peer.addTrack(mediaStream.getAudioTracks()[0])
-    peer.addEventListener('connectionstatechange', () => {
+    peer.addTrack(mediaStream.getVideoTracks()[0])
+    peer.onconnectionstatechange = (() => {
       console.log('p2p peer', peer.connectionState)
     })
-    peer.addEventListener('icecandidate', (event) => {
-      const ice = event.candidate ? event.candidate : null
-      console.log('p2p ice', ice?.toJSON())
-      if (ice) {
-        candidates.push(ice.toJSON())
-      }
-    })
-    const iceDone = new Promise<void>((resolve) => {
-      peer.addEventListener('icegatheringstatechange', () => {
-        console.log('p2p ice gathering', peer.iceGatheringState)
-        if (peer.iceGatheringState === 'complete') {
+    await peer.setRemoteDescription({ sdp: offer, type: 'offer' })
+    const setLocalPromise = peer.setLocalDescription(await peer.createAnswer())
+    // ice candidates gathering after setLocalDescription
+    const candidates: RTCIceCandidateInit[] = []
+    await new Promise<void>((resolve) => {
+      peer.onicecandidate = (event) => {
+        console.log('onicecandidate', event.candidate)
+        const candidate: RTCIceCandidate | null = event.candidate
+        if (candidate) {
+          candidates.push(candidate.toJSON())
+        } else {
           resolve()
         }
-      })
-      // in case icegatheringstatechange not fired
-      const timeoutId = setTimeout(() => {
-        console.log('p2p ice gathering timeout')
-        resolve()
-      }, 5000)
-      if (peer.iceGatheringState === 'complete') {
-        clearTimeout(timeoutId)
-        resolve()
       }
+      // In case there are no candidates at all
+      setTimeout(() => {
+        console.log('timeout candidates', candidates)
+        resolve()
+      }, 3000)
     })
-    // peer.restartIce()
-    await iceDone
+    await setLocalPromise
 
-    await peer.setRemoteDescription({ sdp: offer, type: 'offer' })
-    await peer.setLocalDescription(await peer.createAnswer())
-    return { sid: activeSid, answer: peer.localDescription?.sdp, ice: candidates }
+    await Promise.all(ice.map(candidate => peer.addIceCandidate(candidate)))
+    return { sid: tid, answer: peer.localDescription?.sdp, ice: candidates }
   }
 
   function stopPlayer() {
@@ -175,8 +168,32 @@ function App() {
 
     const whep = new WHEPPlayer({
       videoElement: videoRef.current!,
-      onChatMessage: (message: string, from?: string) => {
-        addChatMessage(message, from)
+      onLocalOffer: async (pc, candidates) => {
+        const res = await sendChannelRequest({
+          method: 'connect',
+          params: {
+            offer: pc.localDescription?.sdp,
+            ice: candidates
+          }
+        })
+        if (res.error) {
+          addChatMessage(`connect error: ${res.error}`)
+          stopPlayer()
+          return
+        }
+        const { sid, answer, ice } = res.data as {
+          sid: string, answer: string, ice: RTCIceCandidateInit[]
+        }
+        if (!answer?.length) {
+          addChatMessage('connect no answer')
+          stopPlayer()
+          return
+        }
+        await pc.setRemoteDescription({ sdp: answer, type: 'answer' })
+        await Promise.all(ice.map(candidate => pc.addIceCandidate(candidate)))
+        requestWakeLock()
+        console.log('set session id', sid)
+        setActiveSessionId(sid)
       },
       onOpen: (sid: string) => {
         requestWakeLock()
@@ -207,16 +224,8 @@ function App() {
         addChatMessage(`debug enabled ${debugEnabled}`)
         break
       case '/t':
-      case '/test': {
-        addChatMessage('test command')
-        const res = await sendChannelRequest({ method: 'connect' })
-        if (res.error) {
-          addChatMessage(`error: ${res.error}`)
-        } else {
-          addChatMessage(`response: ${JSON.stringify(res.data)}`)
-        }
+      case '/test':
         break
-      }
       case '/buffer':
         // TODO config player buffer
         break
@@ -358,9 +367,6 @@ function App() {
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
       videoElement: videoRef.current!,
-      onChatMessage: (message: string, from?: string) => {
-        addChatMessage(message, from)
-      },
       onOpen: (sid) => {
         setActiveSessionId(sid)
         if (roomParam) {
