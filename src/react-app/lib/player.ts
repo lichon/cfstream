@@ -137,21 +137,11 @@ export class WHEPPlayer {
             peer.addTransceiver('audio', { direction: 'recvonly' })
             const setLocalPromise = peer.setLocalDescription(await peer.createOffer())
             // ice candidates gathering after setLocalDescription
-            const candidates: RTCIceCandidateInit[] = []
             await new Promise<void>((resolve) => {
-              peer.onicecandidate = (event) => {
-                const candidate: RTCIceCandidate | null = event.candidate
-                if (candidate && candidate.protocol !== 'tcp') {
-                  candidates.push(candidate.toJSON())
-                } else if (!candidate) {
-                  resolve()
-                }
-              }
-              // In case there are no candidates at all
               setTimeout(() => resolve(), 1000)
             })
             await setLocalPromise
-            this.config.onLocalOffer?.(peer, candidates)
+            this.config.onLocalOffer?.(peer, [])
           },
           disconnect: async () => {
             peer?.close()

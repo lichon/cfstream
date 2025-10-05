@@ -197,6 +197,7 @@ function App() {
         addChatMessage(msg, from)
       },
       onOpen: (sid?: string) => {
+        forceUpdate(n => n + 1)
         requestWakeLock()
         setActiveSessionId(sid)
       },

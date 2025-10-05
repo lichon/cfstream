@@ -19,7 +19,10 @@ export const patchRTCPeerConnection = () => {
     this: RTCPeerConnection,
     configuration?: RTCConfiguration
   ) {
-    const peer = new OriginalRTCPeerConnection(configuration)
+    const peer = new OriginalRTCPeerConnection({
+      ...configuration,
+      bundlePolicy: 'max-bundle',
+    })
     const bootstrapDc = peer.createDataChannel('bootstrap')
     Object.defineProperty(peer, 'bootstrapDc', {
       enumerable: true,
