@@ -22,6 +22,7 @@ let _firstLoad = true
 const urlParams = new URLSearchParams(window.location.search)
 const sidParam = urlParams.get('s') || undefined
 const roomParam = urlParams.get('r') || undefined
+const hideMsg = urlParams.get('hidemsg') || undefined
 const isPlayer = window.location.pathname.startsWith('/watch')
 const SYSTEM_LOG = 'System'
 
@@ -223,6 +224,10 @@ function App() {
       if (ttsEnabled && !isSelfMsg) {
         ttsPlayer.speak(text)
       }
+      if (hideMsg) {
+        console.log(sender, text)
+        return
+      }
     }
     setChatMessages(prev => {
       const msgs = [...prev, {
@@ -266,10 +271,13 @@ function App() {
       },
       onOpen: (sid) => {
         setStreamSession(sid)
-        addChatMessage('client connected')
+        if (roomParam) {
+          const watchUrl = getPlayerUrl(sid, roomParam)
+          sendChannelMessage(`new stream: ${watchUrl}`)
+        }
       },
       onClose: () => {
-        addChatMessage('client closed')
+        // addChatMessage('client closed')
       }
     })
     await streamer.start(mediaStream)
