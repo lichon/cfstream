@@ -2,7 +2,7 @@ import React from 'react'
 
 // Button definition exported so callers can build arrays easily
 export interface ControlBarButton {
-  label: string            // Text shown on the button
+  label: React.ReactNode   // Text shown on the button
   title?: string           // Standard title tooltip
   onClick?: () => void      // Click handler
   disabled?: boolean       // Optional disabled state
@@ -87,7 +87,7 @@ export const ControlBar: React.FC<ControlBarProps> = ({
     return (
       <ul
         role="menu"
-        aria-label={btn.label}
+        aria-label={typeof btn.label === 'string' ? btn.label : undefined}
         data-menu
         className={`absolute top-full min-w-[140px] rounded-lg bg-neutral-900 shadow-lg shadow-black/40 py-1 z-20 overflow-hidden ${alignRight ? 'right-0' : 'left-0'}`}
         onKeyDown={(e) => {

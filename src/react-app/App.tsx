@@ -48,6 +48,7 @@ function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [isFrontCamera, setIsFrontCamera] = useState(false)
   const [isScreenShare, setScreenShare] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const { sendChannelMessage, isChannelConnected, onlineMembers } = useSupabaseChannel({
     roomName: roomParam ?? '',
@@ -330,7 +331,16 @@ function App() {
       }
     )(),
     {
-      label: 'Share',
+      label: (
+        <span className="flex items-center gap-1">
+          {copied && <span className="ml-2 text-green-400 text-xs">Copied!</span>}
+          {!copied && 'Share'}
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+            <rect x="6" y="6" width="10" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+            <rect x="4" y="2" width="10" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" opacity="0.5"/>
+          </svg>
+        </span>
+      ),
       title: 'Share player link, copy to clipboard',
       onClick: () => {
         const playerUrl = getPlayerUrl(streamSession, roomParam)
@@ -339,6 +349,8 @@ function App() {
         }
         setQrVisible(true)
         navigator.clipboard?.writeText(playerUrl)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
       },
     },
     {
