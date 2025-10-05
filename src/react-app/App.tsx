@@ -49,6 +49,7 @@ function App() {
   const [isFrontCamera, setIsFrontCamera] = useState(false)
   const [isScreenShare, setScreenShare] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [_, forceUpdate] = useState(0)
 
   const { request: requestWakeLock, release: releaseWakeLock } = useWakeLock()
   const {
@@ -145,10 +146,7 @@ function App() {
         }
       }
       // In case there are no candidates at all
-      setTimeout(() => {
-        console.log('timeout candidates', candidates)
-        resolve()
-      }, 5000)
+      setTimeout(() => { resolve() }, 5000)
     })
     await setLocalPromise
 
@@ -349,14 +347,16 @@ function App() {
 
   function startMediaStream(mediaStream: MediaStream) {
     videoRef.current!.srcObject = mediaStream
-    // p2p mode only
+    forceUpdate(n => n + 1)
     return true
   }
 
   function stopMediaStream() {
-    if (videoRef.current?.srcObject) {
-      (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop())
-      videoRef.current.srcObject = null
+    const video = videoRef.current
+    if (video?.srcObject) {
+      (video.srcObject as MediaStream).getTracks().forEach(track => track.stop())
+      video.srcObject = null
+      forceUpdate(n => n + 1)
     }
   }
 
