@@ -196,9 +196,11 @@ function App() {
         await pc.setRemoteDescription({ sdp: answer, type: 'answer' })
         await Promise.all(ice.map(candidate => pc.addIceCandidate(candidate)))
         requestWakeLock()
-        addChatMessage(`p2p connected`)
       },
-      onOpen: (sid: string) => {
+      onChatMessage: (msg, from) => {
+        addChatMessage(msg, from)
+      },
+      onOpen: (sid?: string) => {
         requestWakeLock()
         setActiveSessionId(sid)
       },
@@ -377,6 +379,9 @@ function App() {
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
       videoElement: videoRef.current!,
+      onChatMessage: (msg, from) => {
+        addChatMessage(msg, from)
+      },
       onOpen: (sid) => {
         setActiveSessionId(sid)
         if (roomParam) {

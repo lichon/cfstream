@@ -14,7 +14,7 @@ export interface PlayerConfig {
   videoElement: HTMLVideoElement
   onLocalOffer?: (pc: RTCPeerConnection, candidates: RTCIceCandidateInit[]) => Promise<void>
   onChatMessage?: (message: string, from?: string) => void
-  onOpen?: (sid: string) => void
+  onOpen?: (sid?: string) => void
   onClose?: () => void
 }
 
@@ -111,7 +111,7 @@ export class WHEPPlayer {
       type: sidParam?.length ? 'whep' : 'custom',
       statsTypeFilter: '^inbound-rtp',
       iceServers: stunServers,
-      detectTimeout: !!sidParam?.length,
+      detectTimeout: sidParam?.length ? true : false,
       adapterFactory: (playerPeer, _url, _onError, _mediaConstraints, _authKey) => {
         let peer = playerPeer
         return {
@@ -174,7 +174,7 @@ export class WHEPPlayer {
       this.destroy()
     })
 
-    onChatMessage?.(`loading ${sidParam}`)
+    onChatMessage?.(`loading ${sidParam ?? 'p2p'}`)
     player.load(new URL(getSessionUrl(sidParam) + '/play')).then(() => {
       const playerObj = player as never
       const peer = playerObj['peer'] as never
@@ -182,7 +182,7 @@ export class WHEPPlayer {
 
       bootstrapDc.onopen = () => {
         this.jitterBufferConfig(peer)
-        sidParam ?? onOpen?.(sidParam!) // eslint-disable-line
+        onOpen?.(sidParam)
       }
     })
     this.player = player
