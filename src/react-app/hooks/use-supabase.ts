@@ -203,7 +203,7 @@ export function useSupabaseChannel(config: ChannelConfig) {
       const tid = req.tid
 
       if (!channel || !isChannelConnected) {
-        return { tid, error: 'channel not connected' } as ChannelResponse
+        return { error: 'channel not connected' } as ChannelResponse
       }
 
       let timeoutId: NodeJS.Timeout
@@ -211,7 +211,7 @@ export function useSupabaseChannel(config: ChannelConfig) {
         outgoingRequests.set(tid, { resolve, reject })
         timeoutId = setTimeout(() => {
           reject(new Error('timeout'))
-        }, 30000)
+        }, 5000)
       })
 
       console.log('sendChannelRequest', req)
@@ -229,7 +229,7 @@ export function useSupabaseChannel(config: ChannelConfig) {
         const error = e instanceof Error ? e.message : 'unknown error'
         return { error } as ChannelResponse
       } finally {
-        console.log('outgoing request clean up', tid)
+        console.log('ChannelRequest done', tid)
         outgoingRequests.delete(tid)
       }
     },

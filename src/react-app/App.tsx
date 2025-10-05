@@ -64,7 +64,7 @@ function App() {
     onChannelRequest: async (req) => {
       if (req.method !== 'connect')
         return
-      return await connectRequestHandler(req.tid!, req.params)
+      return await connectRequestHandler(req.params)
     },
     onChannelEvent: (msg) => {
       if (typeof msg.content === 'string') {
@@ -109,9 +109,10 @@ function App() {
     addChatMessage('type /? for help')
   }
 
-  async function connectRequestHandler(tid: string, params: unknown) {
+  async function connectRequestHandler(params: unknown) {
     const mediaStream = videoRef.current?.srcObject as MediaStream | null
-    if (!mediaStream) {
+    if (isPlayer || !mediaStream) {
+      // TODO support player to player p2p?
       return
     }
     console.log('handle p2p request', params)
@@ -124,6 +125,11 @@ function App() {
     peer.addTrack(mediaStream.getVideoTracks()[0])
     peer.onconnectionstatechange = (() => {
       console.log('p2p peer', peer.connectionState)
+      // TODO set bit rate based on connection quality
+      if (peer.connectionState === 'failed') {
+        peer.onicecandidate = null
+        peer.close()
+      }
     })
     await peer.setRemoteDescription({ sdp: offer, type: 'offer' })
     const setLocalPromise = peer.setLocalDescription(await peer.createAnswer())
@@ -141,13 +147,14 @@ function App() {
       // In case there are no candidates at all
       setTimeout(() => {
         console.log('timeout candidates', candidates)
+        peer.onicecandidate = null
         resolve()
       }, 3000)
     })
     await setLocalPromise
 
     await Promise.all(ice.map(candidate => peer.addIceCandidate(candidate)))
-    return { sid: tid, answer: peer.localDescription?.sdp, ice: candidates }
+    return { answer: peer.localDescription?.sdp, ice: candidates }
   }
 
   function stopPlayer() {
@@ -178,8 +185,8 @@ function App() {
           stopPlayer()
           return
         }
-        const { sid, answer, ice } = res.data as {
-          sid: string, answer: string, ice: RTCIceCandidateInit[]
+        const { answer, ice } = res.data as {
+          answer: string, ice: RTCIceCandidateInit[]
         }
         if (!answer?.length) {
           addChatMessage('connect no answer')
@@ -189,8 +196,7 @@ function App() {
         await pc.setRemoteDescription({ sdp: answer, type: 'answer' })
         await Promise.all(ice.map(candidate => pc.addIceCandidate(candidate)))
         requestWakeLock()
-        console.log('set session id', sid)
-        setActiveSessionId(sid)
+        addChatMessage(`p2p connected`)
       },
       onOpen: (sid: string) => {
         requestWakeLock()
@@ -202,7 +208,7 @@ function App() {
         setActiveSessionId(undefined)
       },
     })
-    await whep.start(sidParam, roomParam)
+    await whep.start(sidParam)
     setPlayer(whep)
   }
 
@@ -341,6 +347,13 @@ function App() {
     streamer?.switchMedia(!isScreenShare, !isFrontCamera)
   }
 
+  function stopMediaStream() {
+    if (videoRef.current?.srcObject) {
+      (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop())
+      videoRef.current.srcObject = null
+    }
+  }
+
   async function stopStream() {
     if (streamer) {
       try {
@@ -374,7 +387,8 @@ function App() {
       onClose: () => {
       }
     })
-    await streamer.start(mediaStream)
+    videoRef.current!.srcObject = mediaStream
+    // await streamer.start(mediaStream)
     requestWakeLock()
     setStreamer(streamer)
   }
@@ -383,11 +397,12 @@ function App() {
   const controlBarButtons: ControlBarButton[] = [
     (
       () => {
-        if (activeSessionId) {
+        if (videoRef.current?.srcObject) {
           return {
             label: 'Stop',
             onClick: () => {
               releaseWakeLock()
+              stopMediaStream()
               stopStream()
               stopPlayer()
             },

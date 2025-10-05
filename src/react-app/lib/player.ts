@@ -1,6 +1,6 @@
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import { SignalMessage, SignalEvent, SignalPeer } from './signalpeer'
-import { getSessionUrl, requestDataChannel, getSessionByName, extractSessionIdFromUrl } from './api'
+import { getSessionUrl, requestDataChannel, extractSessionIdFromUrl } from './api'
 import { getConfig } from '../config'
 
 let debug = getConfig().debug
@@ -98,14 +98,12 @@ export class WHEPPlayer {
     })
   }
 
-  public async start(sidParam?: string, nameParam?: string) {
+  public async start(sidParam?: string) {
     const { videoElement, onOpen, onChatMessage } = this.config
-
     if (this.player || !videoElement) return
-
-    if (nameParam?.length) {
-      sidParam = await getSessionByName(nameParam)
-    }
+    // if (nameParam?.length) {
+    //   sidParam = await getSessionByName(nameParam)
+    // }
 
     const player = new WebRTCPlayer({
       debug: debug,
