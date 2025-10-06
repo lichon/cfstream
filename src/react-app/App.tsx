@@ -22,6 +22,7 @@ const urlParams = new URLSearchParams(window.location.search)
 const sidParam = urlParams.get('s') || undefined
 const roomParam = urlParams.get('r') || undefined
 const hideMsg = urlParams.get('hidemsg') || undefined
+const p2pMode = roomParam && urlParams.get('p2p')
 const isPlayer = window.location.pathname.startsWith('/watch')
 const SYSTEM_LOG = 'System'
 
@@ -207,7 +208,7 @@ function App() {
         setActiveSessionId(undefined)
       },
     })
-    await whep.start(sidParam)
+    await whep.start(sidParam, p2pMode ? '' : roomParam)
     setPlayer(whep)
   }
 
@@ -349,7 +350,6 @@ function App() {
   function startMediaStream(mediaStream: MediaStream) {
     videoRef.current!.srcObject = mediaStream
     forceUpdate(n => n + 1)
-    return true
   }
 
   function stopMediaStream() {
@@ -372,7 +372,7 @@ function App() {
     }
   }
 
-  async function startStream(shareScreen?: boolean) {
+  async function startStreamer(shareScreen?: boolean) {
     setScreenShare(shareScreen ?? false)
     let mediaStream: MediaStream
     try {
@@ -381,7 +381,8 @@ function App() {
       addChatMessage(`get media failed: ${(e as Error).toString()}`)
       return
     }
-    if (startMediaStream(mediaStream)) {
+    if (p2pMode) {
+      startMediaStream(mediaStream)
       return
     }
 
@@ -433,16 +434,16 @@ function App() {
         return {
           label: 'Start',
           title: 'Start camera or screen share',
-          onClick: () => { if (isMobile) startStream(false) },
+          onClick: () => { if (isMobile) startStreamer(false) },
           menu: isMobile ? undefined : {
             items: [
               {
                 label: 'Start Camera',
-                onClick: () => startStream(false)
+                onClick: () => startStreamer(false)
               },
               {
                 label: 'Start Screen',
-                onClick: () => startStream(true)
+                onClick: () => startStreamer(true)
               }
             ],
             openOn: 'hover',

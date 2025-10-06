@@ -1,7 +1,10 @@
 import { WebRTCPlayer } from "@eyevinn/webrtc-player"
 import { SignalMessage, SignalEvent, SignalPeer } from './signalpeer'
-import { getSessionUrl, requestDataChannel, extractSessionIdFromUrl } from './api'
 import { getConfig } from '../config'
+import {
+  getSessionUrl, getSessionByName,
+  requestDataChannel, extractSessionIdFromUrl
+} from './api'
 
 let debug = getConfig().debug
 const stunServers = getConfig().api.stunServers
@@ -92,18 +95,13 @@ export class WHEPPlayer {
     })
   }
 
-  private jitterBufferConfig = (peer: RTCPeerConnection) => {
-    peer.getReceivers().forEach(r => {
-      r.jitterBufferTarget = defaultBufferTarget
-    })
-  }
 
-  public async start(sidParam?: string) {
+  public async start(sidParam?: string, nameParam?: string) {
     const { videoElement, onOpen, onChatMessage } = this.config
     if (this.player || !videoElement) return
-    // if (nameParam?.length) {
-    //   sidParam = await getSessionByName(nameParam)
-    // }
+    if (nameParam?.length) {
+      sidParam = await getSessionByName(nameParam)
+    }
 
     const player = new WebRTCPlayer({
       debug: debug,
@@ -159,25 +157,21 @@ export class WHEPPlayer {
     })
 
     onChatMessage?.(`loading ${sidParam ?? ''}`)
-    player.load(new URL(getSessionUrl(sidParam) + '/play')).then(() => {
+    await player.load(new URL(getSessionUrl(sidParam) + '/play'))
+    await (async () => {
       const playerObj = player as never
       const peer = playerObj['peer'] as never
+      // inject by  patched peer connection
       const bootstrapDc = peer['bootstrapDc'] as RTCDataChannel
 
       bootstrapDc.onopen = () => {
-        this.jitterBufferConfig(peer)
+        (peer as RTCPeerConnection).getReceivers().forEach(r => {
+          r.jitterBufferTarget = defaultBufferTarget
+        })
         onOpen?.(sidParam)
       }
-    })
+    })()
     this.player = player
-  }
-
-  public getPlayerDc() {
-    return this.playerDc
-  }
-
-  public getPlayerSid() {
-    return this.playerSid
   }
 
   public stop() {
@@ -192,5 +186,13 @@ export class WHEPPlayer {
       this.playerDc = undefined
       this.config.onClose?.()
     }
+  }
+
+  public getPlayerDc() {
+    return this.playerDc
+  }
+
+  public getPlayerSid() {
+    return this.playerSid
   }
 }
