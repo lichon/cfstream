@@ -111,7 +111,6 @@ export class WHEPPlayer {
       type: sidParam?.length ? 'whep' : 'custom',
       statsTypeFilter: '^inbound-rtp',
       iceServers: stunServers,
-      detectTimeout: sidParam?.length ? true : false,
       adapterFactory: (playerPeer, _url, _onError, _mediaConstraints, _authKey) => {
         let peer = playerPeer
         return {
@@ -157,14 +156,9 @@ export class WHEPPlayer {
     player.on('initial-connection-failed', () => {
       onChatMessage?.('initial connection failed')
       this.stop()
-      setTimeout(() => { this.start() }, 1000)
-    })
-    player.on('peer-connection-failed', () => {
-      onChatMessage?.('peer connection failed')
-      this.stop()
     })
 
-    onChatMessage?.(`loading ${sidParam ?? 'p2p'}`)
+    onChatMessage?.(`loading ${sidParam ?? ''}`)
     player.load(new URL(getSessionUrl(sidParam) + '/play')).then(() => {
       const playerObj = player as never
       const peer = playerObj['peer'] as never
