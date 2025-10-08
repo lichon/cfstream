@@ -66,7 +66,7 @@ function App() {
     onChannelRequest: async (req) => {
       if (req.method !== 'connect')
         return
-      return await connectRequestHandler(req.params)
+      return await connectRequestHandler(req.body)
     },
     onChannelEvent: (msg) => {
       if (typeof msg.content === 'string') {
@@ -173,7 +173,7 @@ function App() {
       onLocalOffer: async (pc, candidates) => {
         const res = await sendChannelRequest({
           method: 'connect',
-          params: {
+          body: {
             offer: pc.localDescription?.sdp,
             ice: candidates
           }
@@ -183,7 +183,7 @@ function App() {
           stopPlayer()
           return
         }
-        const { answer, ice } = res.data as {
+        const { answer, ice } = res.body as {
           answer: string, ice: RTCIceCandidateInit[]
         }
         if (!answer?.length) {

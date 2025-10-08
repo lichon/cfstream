@@ -8,15 +8,10 @@ type ChannelMessageType = 'message' | 'event' | 'command'
 
 type ChannelRequestMethod = 'ping' | 'connect'
 
-export interface ChannelRequest {
+export interface ChannelCommand {
   tid?: string
-  method: ChannelRequestMethod
-  params?: unknown
-}
-
-export interface ChannelResponse {
-  tid?: string
-  data?: unknown
+  method?: ChannelRequestMethod
+  body?: unknown
   error?: string
 }
 
@@ -37,7 +32,7 @@ interface ChannelMember {
 interface ChannelConfig {
   roomName: string
   onChannelEvent?: (msg: ChannelMessage) => void
-  onChannelRequest?: (req: ChannelRequest) => Promise<unknown>
+  onChannelRequest?: (req: ChannelCommand) => Promise<unknown>
   onChatMessage?: (msg: ChannelMessage) => void
 }
 
@@ -147,13 +142,13 @@ export function useSupabaseChannel(config: ChannelConfig) {
   }
 
   const channelCommandHandler = async (cmd: ChannelMessage, ch: typeof channel) => {
-    const req = cmd.content as ChannelRequest
+    const req = cmd.content as ChannelCommand
     if (fakeId === cmd.id) {
       // ignore commands from self
       return
     }
     if (!req.method?.length) {
-      const res = cmd.content as ChannelResponse
+      const res = cmd.content as ChannelCommand
       const handlers = outgoingRequests.get(res.tid!)
       if (!handlers) {
         return
@@ -162,14 +157,14 @@ export function useSupabaseChannel(config: ChannelConfig) {
       if (res.error) {
         handlers.reject(new Error(res.error))
       } else {
-        handlers.resolve(res.data)
+        handlers.resolve(res.body)
       }
       return
     }
 
     switch (req.method) {
       case 'ping':
-        sendChannelResponse({ tid: req.tid, data: 'pong' }, ch)
+        sendChannelCommand({ tid: req.tid, body: 'pong' }, ch)
         break
       default:
         try {
@@ -177,33 +172,33 @@ export function useSupabaseChannel(config: ChannelConfig) {
           if (!res)
             return
           console.log('handleChannelRequest', req)
-          sendChannelResponse({ tid: req.tid, data: res }, ch)
+          sendChannelCommand({ tid: req.tid, body: res }, ch)
         } catch (e) {
           const error = e instanceof Error ? e.message : 'unknown error'
-          sendChannelResponse({ tid: req.tid, error }, ch)
+          sendChannelCommand({ tid: req.tid, error }, ch)
         }
         break
     }
   }
 
-  const sendChannelResponse = async (res: ChannelResponse, ch: typeof channel) => {
-    console.log('sendChannelResponse', res)
+  const sendChannelCommand = async (cmd: ChannelCommand, ch: typeof channel) => {
+    console.log(`${cmd.method ? 'sendChannelRequest' : 'sendChannelResponse'}`, cmd)
     await ch?.send({
       type: 'broadcast',
       event: 'command',
-      payload: newMessage(res),
+      payload: newMessage(cmd),
     })
   }
 
   const sendChannelRequest = useCallback(
-    async (req: ChannelRequest): Promise<ChannelResponse> => {
+    async (req: ChannelCommand): Promise<ChannelCommand> => {
       if (!req.tid?.length) {
         req.tid = crypto.randomUUID()
       }
       const tid = req.tid
 
       if (!channel || !isChannelConnected) {
-        return { error: 'channel not connected' } as ChannelResponse
+        return { error: 'channel not connected' } as ChannelCommand
       }
 
       let timeoutId: NodeJS.Timeout
@@ -214,26 +209,21 @@ export function useSupabaseChannel(config: ChannelConfig) {
         }, 10000)
       })
 
-      console.log('sendChannelRequest', req)
-      await channel.send({
-        type: 'broadcast',
-        event: 'command',
-        payload: newMessage(req),
-      })
+      await sendChannelCommand(req, channel)
 
       try {
         const data = await response
         clearTimeout(timeoutId!)
-        return { data } as ChannelResponse
+        return { body: data } as ChannelCommand
       } catch (e) {
         const error = e instanceof Error ? e.message : 'unknown error'
-        return { error } as ChannelResponse
+        return { error } as ChannelCommand
       } finally {
         console.log('ChannelRequest done', tid)
         outgoingRequests.delete(tid)
       }
     },
-    [channel, isChannelConnected]
+    [channel, isChannelConnected] // eslint-disable-line
   )
 
   const sendChannelMessage = useCallback(
