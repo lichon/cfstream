@@ -109,6 +109,7 @@ export class WHEPPlayer {
       type: sidParam?.length ? 'whep' : 'custom',
       statsTypeFilter: '^inbound-rtp',
       iceServers: stunServers,
+      timeoutThreshold: 60000,
       adapterFactory: (playerPeer, _url, _onError, _mediaConstraints, _authKey) => {
         let peer = playerPeer
         return {

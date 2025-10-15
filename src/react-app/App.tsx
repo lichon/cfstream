@@ -136,23 +136,13 @@ function App() {
     await peer.setRemoteDescription({ sdp: offer, type: 'offer' })
     const setLocalPromise = peer.setLocalDescription(await peer.createAnswer())
     // ice candidates gathering after setLocalDescription
-    const candidates: RTCIceCandidateInit[] = []
     await new Promise<void>((resolve) => {
-      peer.onicecandidate = (event) => {
-        const candidate: RTCIceCandidate | null = event.candidate
-        if (candidate && candidate.protocol !== 'tcp') {
-          candidates.push(candidate.toJSON())
-        } else if (!candidate) {
-          resolve()
-        }
-      }
-      // In case there are no candidates at all
-      setTimeout(() => { resolve() }, 5000)
+      setTimeout(() => resolve(), 1000)
     })
     await setLocalPromise
 
     await Promise.all(ice.map(candidate => peer.addIceCandidate(candidate)))
-    return { answer: peer.localDescription?.sdp, ice: candidates }
+    return { answer: peer.localDescription?.sdp, ice: [] }
   }
 
   function stopPlayer() {

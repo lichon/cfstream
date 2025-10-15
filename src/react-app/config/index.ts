@@ -47,7 +47,7 @@ const defaultConfig: AppConfig = {
     host: window.location.host,
     roomUrl: '/api/rooms',
     sessionUrl: '/api/sessions',
-    stunServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    stunServers: [{ urls: 'stun:stun.cloudflare.com:3478' }]
   },
   stream: {
     broadcastInterval: 5000,
