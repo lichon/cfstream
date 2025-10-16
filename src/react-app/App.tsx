@@ -47,7 +47,7 @@ function App() {
   const [logVisible, setLogVisible] = useState(false)
   const [chatVisible, setChatVisible] = useState(true)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [isFrontCamera, setIsFrontCamera] = useState(false)
+  const [isFrontCamera, setIsFrontCamera] = useState(true)
   const [isScreenShare, setScreenShare] = useState(false)
   const [copied, setCopied] = useState(false)
   const [_, forceUpdate] = useState(0)

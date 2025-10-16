@@ -45,7 +45,7 @@ export class WHIPStreamer {
         video: {
           width: { ideal: 1920 },
           height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
+          frameRate: { ideal: 60 },
         },
         audio: true,
       })
@@ -53,7 +53,7 @@ export class WHIPStreamer {
     return await navigator.mediaDevices.getUserMedia({
       video: {
         frameRate: { ideal: 30 },
-        facingMode: facingMode || 'environment'
+        facingMode: facingMode || 'user'
       },
       audio: { deviceId: 'communications' },
     })
