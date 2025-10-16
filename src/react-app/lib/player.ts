@@ -8,7 +8,7 @@ import {
 
 let debug = getConfig().debug
 const stunServers = getConfig().api.stunServers
-const defaultBufferTarget = getConfig().stream.jitterBufferTarget || 500
+const defaultBufferTarget = getConfig().stream.jitterBufferTarget || 200
 const selfDisplayName = getConfig().ui.selfDisplayName
 
 const LOG_TAG = 'Player'

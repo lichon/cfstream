@@ -524,7 +524,12 @@ function App() {
       <StreamVideo
         videoRef={videoRef}
         isMobile={isMobile}
-        onClick={() => { setLogVisible(false) }}
+        onClick={() => {
+          setLogVisible(false)
+          if (isPlayer) {
+            switchMedia()
+          }
+        }}
       />
       <AvatarStack
         orientation='horizontal'
