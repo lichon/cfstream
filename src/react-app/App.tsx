@@ -211,15 +211,17 @@ function App() {
         lastPeer = peer
         if (res.error) {
           addChatMessage(`connect error: ${res.error}`)
-          stopPlayer()
+          whep.stop()
+          setPlayer(undefined)
           return
         }
         const { answer, ice } = res.body as {
           answer: string, ice: RTCIceCandidateInit[]
         }
         if (!answer?.length) {
-          addChatMessage('connect error: no answer')
-          stopPlayer()
+          addChatMessage('connect error: invalid answer')
+          whep.stop()
+          setPlayer(undefined)
           return
         }
         await peer.setRemoteDescription({ sdp: answer, type: 'answer' })

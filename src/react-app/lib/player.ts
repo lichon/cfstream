@@ -128,12 +128,16 @@ export class WHEPPlayer {
     })
 
     player.on('no-media', () => {
-      onChatMessage?.('media timeout')
-      this.stop()
+      if (this.player) {
+        onChatMessage?.('media timeout')
+        this.stop()
+      }
     })
     player.on('initial-connection-failed', () => {
-      onChatMessage?.('initial connection failed')
-      this.stop()
+      if (this.player) {
+        onChatMessage?.('initial connection failed')
+        this.stop()
+      }
     })
 
     onChatMessage?.(`loading ${sidParam ?? ''}`)
