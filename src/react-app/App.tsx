@@ -141,7 +141,10 @@ function App() {
     })
     await setLocalPromise
 
-    await Promise.all(ice.map(candidate => peer.addIceCandidate(candidate)))
+    // start connection after remote peer send stun request
+    setTimeout(() => {
+      ice.map(candidate => peer.addIceCandidate(candidate))
+    }, 500)
     return { answer: peer.localDescription?.sdp, ice: [] }
   }
 
@@ -158,6 +161,7 @@ function App() {
       return
     }
 
+    let lastPeer: RTCPeerConnection | null = null
     const whep = new WHEPPlayer({
       videoElement: videoRef.current!,
       p2pConnect: async (peer) => {
@@ -181,20 +185,30 @@ function App() {
         // prepare offer
         peer.addTransceiver('video', { direction: 'recvonly' })
         peer.addTransceiver('audio', { direction: 'recvonly' })
-        const setLocalPromise = peer.setLocalDescription(await peer.createOffer())
+        const candidates: RTCIceCandidateInit[] = []
+        peer.onicecandidate = (event) => {
+          if (event.candidate && event.candidate.protocol === 'udp') {
+            candidates.push(event.candidate.toJSON())
+          }
+        }
+        const offer = await peer.createOffer()
+        const setLocalPromise = peer.setLocalDescription(offer)
         // ice candidates gathering after setLocalDescription
         await new Promise<void>((resolve) => {
           setTimeout(() => resolve(), 1000)
         })
         await setLocalPromise
 
+        // use offer without ice candidates at first time, make sure local start stun request
+        // after first try, use full offer with ice candidates, make sure remote start stun first
         const res = await sendChannelRequest({
           method: 'connect',
           body: {
-            offer: peer.localDescription?.sdp,
-            ice: []
+            offer: lastPeer == null ? offer.sdp : peer.localDescription?.sdp,
+            ice: candidates
           }
         })
+        lastPeer = peer
         if (res.error) {
           addChatMessage(`connect error: ${res.error}`)
           stopPlayer()
