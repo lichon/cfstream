@@ -27,6 +27,10 @@ const StreamVideo: React.FC<VideoContainerProps> = ({ videoRef, isMobile, onClic
             if (!video.src && !video.srcObject) {
               return
             }
+            if (video.muted) {
+              video.muted = false
+              return
+            }
             if (!isMobile) {
               return
             }

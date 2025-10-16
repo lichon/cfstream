@@ -22,7 +22,7 @@ const urlParams = new URLSearchParams(window.location.search)
 const sidParam = urlParams.get('s') || undefined
 const roomParam = urlParams.get('r') || undefined
 const hideMsg = urlParams.get('hidemsg') || undefined
-const p2pMode = roomParam && urlParams.get('p2p')
+const p2pMode = roomParam || urlParams.get('p2p')
 const isPlayer = window.location.pathname.startsWith('/watch')
 const SYSTEM_LOG = 'System'
 
@@ -160,12 +160,39 @@ function App() {
 
     const whep = new WHEPPlayer({
       videoElement: videoRef.current!,
-      onLocalOffer: async (pc, candidates) => {
+      p2pConnect: async (peer) => {
+        const video = videoRef.current!
+        const stream = video.srcObject as MediaStream | null
+        if (stream) {
+          stream.getTracks().forEach(t => t.stop())
+          video.srcObject = null
+        }
+        console.log('start p2p connect')
+        const newStream = new MediaStream()
+        peer.ontrack = (event) => {
+          if (!event.track) {
+            return
+          }
+          newStream.addTrack(event.track)
+          if (!video.srcObject) {
+            video.srcObject = newStream
+          }
+        }
+        // prepare offer
+        peer.addTransceiver('video', { direction: 'recvonly' })
+        peer.addTransceiver('audio', { direction: 'recvonly' })
+        const setLocalPromise = peer.setLocalDescription(await peer.createOffer())
+        // ice candidates gathering after setLocalDescription
+        await new Promise<void>((resolve) => {
+          setTimeout(() => resolve(), 1000)
+        })
+        await setLocalPromise
+
         const res = await sendChannelRequest({
           method: 'connect',
           body: {
-            offer: pc.localDescription?.sdp,
-            ice: candidates
+            offer: peer.localDescription?.sdp,
+            ice: []
           }
         })
         if (res.error) {
@@ -177,12 +204,12 @@ function App() {
           answer: string, ice: RTCIceCandidateInit[]
         }
         if (!answer?.length) {
-          addChatMessage('connect no answer')
+          addChatMessage('connect error: no answer')
           stopPlayer()
           return
         }
-        await pc.setRemoteDescription({ sdp: answer, type: 'answer' })
-        await Promise.all(ice.map(candidate => pc.addIceCandidate(candidate)))
+        await peer.setRemoteDescription({ sdp: answer, type: 'answer' })
+        await Promise.all(ice.map(candidate => peer.addIceCandidate(candidate)))
       },
       onChatMessage: (msg, from) => {
         addChatMessage(msg, from)
@@ -332,6 +359,7 @@ function App() {
       handleCmd('/mute')
       return
     }
+    // TODO support p2p mode
     setIsFrontCamera(!isFrontCamera)
     setScreenShare(!isScreenShare)
     streamer?.switchMedia(!isScreenShare, !isFrontCamera)
@@ -376,6 +404,7 @@ function App() {
       return
     }
 
+    // TODO start whip on 'connect' request
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
       videoElement: videoRef.current!,

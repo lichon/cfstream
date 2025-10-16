@@ -15,7 +15,8 @@ const LOG_TAG = 'Player'
 
 export interface PlayerConfig {
   videoElement: HTMLVideoElement
-  onLocalOffer?: (pc: RTCPeerConnection, candidates: RTCIceCandidateInit[]) => Promise<void>
+  mediaTimeout?: number
+  p2pConnect?: (peer: RTCPeerConnection) => Promise<void>
   onChatMessage?: (message: string, from?: string) => void
   onOpen?: (sid?: string) => void
   onClose?: () => void
@@ -97,7 +98,7 @@ export class WHEPPlayer {
 
 
   public async start(sidParam?: string, nameParam?: string) {
-    const { videoElement, onOpen, onChatMessage } = this.config
+    const { videoElement, p2pConnect, onOpen, onChatMessage } = this.config
     if (this.player || !videoElement) return
     if (nameParam?.length) {
       sidParam = await getSessionByName(nameParam)
@@ -109,7 +110,7 @@ export class WHEPPlayer {
       type: sidParam?.length ? 'whep' : 'custom',
       statsTypeFilter: '^inbound-rtp',
       iceServers: stunServers,
-      timeoutThreshold: 60000,
+      timeoutThreshold: this.config.mediaTimeout ?? 60000,
       adapterFactory: (playerPeer, _url, _onError, _mediaConstraints, _authKey) => {
         let peer = playerPeer
         return {
@@ -117,29 +118,7 @@ export class WHEPPlayer {
           getPeer: () => peer,
           resetPeer: (newPeer: RTCPeerConnection) => { peer = newPeer },
           connect: async () => {
-            const stream = videoElement.srcObject as MediaStream | null
-            if (stream) {
-              stream.getTracks().forEach(t => t.stop())
-            }
-            console.log('connect with channel rpc')
-            const newStream = new MediaStream()
-            peer.ontrack = (event) => {
-              if (!event.track) return
-              newStream.addTrack(event.track)
-              if (!videoElement.srcObject) {
-                videoElement.srcObject = newStream
-              }
-            }
-            // prepare offer
-            peer.addTransceiver('video', { direction: 'recvonly' })
-            peer.addTransceiver('audio', { direction: 'recvonly' })
-            const setLocalPromise = peer.setLocalDescription(await peer.createOffer())
-            // ice candidates gathering after setLocalDescription
-            await new Promise<void>((resolve) => {
-              setTimeout(() => resolve(), 1000)
-            })
-            await setLocalPromise
-            this.config.onLocalOffer?.(peer, [])
+            await p2pConnect?.(peer)
           },
           disconnect: async () => {
             peer?.close()
