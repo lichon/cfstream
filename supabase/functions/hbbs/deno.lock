@@ -1,0 +1,11 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@supabase/functions-js@*": "2.5.0"
+  },
+  "jsr": {
+    "@supabase/functions-js@2.5.0": {
+      "integrity": "c48e3fc5da1510ce6dab34af3fc49cd637ea7b721d92faffd0545cbdcc548430"
+    }
+  }
+}
