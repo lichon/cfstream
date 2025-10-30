@@ -3,34 +3,72 @@
 // This enables autocomplete, go to definition, etc.
 
 // Setup type definitions for built-in Supabase Runtime APIs
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 
-console.log("Start hbbs server!")
-
+console.log('Start hbbs server!')
+//
+function safeCloseController(controller) {
+  try {
+    controller.close()
+  } catch (error) {
+    console.error('safeCloseController error', error)
+  }
+}
+//
+function safeCloseWebSocket(websocket) {
+  try {
+    if (websocket.readyState === WS_READY_STATE_OPEN) {
+      websocket.close()
+    }
+  } catch (error) {
+    console.error('safeCloseWebSocket error', error)
+  }
+}
+//
+function getWebSocketReadableStream(socket) {
+  let streamCancelled = false
+  return new ReadableStream({
+    start(controller) {
+      socket.addEventListener('message', async (e) => {
+        if (streamCancelled) {
+          return
+        }
+        console.log(`message received ${e.data.byteLength} bytes`)
+        controller.enqueue(e.data)
+      })
+      socket.addEventListener('error', (e) => {
+        console.log('websocket error')
+        streamCancelled = true
+        controller.error(e)
+      })
+      socket.addEventListener('close', () => {
+        console.log('webSocket closed')
+        if (!streamCancelled) {
+          safeCloseController(controller)
+        }
+      })
+    },
+    cancel(reason) {
+      console.log(`websocket stream is cancel DUE to `, reason)
+      if (!streamCancelled) {
+        streamCancelled = true
+        safeCloseWebSocket(socket)
+      }
+    }
+  })
+}
+//
 Deno.serve(async (req) => {
-  const upgrade = req.headers.get("upgrade") || ""
-  if (upgrade.toLowerCase() != "websocket") {
-    return new Response("Bad Request", {
+  const upgrade = req.headers.get('upgrade') || ''
+  if (upgrade.toLowerCase() != 'websocket') {
+    return new Response('Bad Request', {
       status: 400
     })
   }
-  const { websocket, response } = Deno.upgradeWebSocket(req)
   const room = Deno.env.get('HBBS_ROOM_ID') || 'default_room'
-  websocket.onopen = () => {
-    console.log(`WebSocket connection established for room: ${room}`)
-  }
-  websocket.onmessage = (event) => {
-    console.log(`Received message in room ${room}: ${event.data}`)
-    // Echo the message back to the client
-    websocket.send(`Echo from room ${room}: ${event.data}`)
-  }
-  websocket.onclose = () => {
-    console.log(`WebSocket connection closed for room: ${room}`)
-  }
-  websocket.onerror = (err) => {
-    console.error(`WebSocket error in room ${room}:`, err)
-  }
-
+  console.log(`Joining room: ${room}`)
+  const { socket, response } = Deno.upgradeWebSocket(req)
+  getWebSocketReadableStream(socket)
   return response
 })
 
