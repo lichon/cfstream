@@ -102,13 +102,16 @@ function App() {
 
   useEffect(() => {
     if (isChannelConnected && isPlayer) {
-      patchRTCPeerConnection()
+      // auto start player when channel connected
       startPlayer()
     }
   }, [isChannelConnected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function firstLoad() {
     addChatMessage('type /? for help')
+    if (isPlayer) {
+      patchRTCPeerConnection()
+    }
   }
 
   async function connectRequestHandler(params: unknown) {
@@ -429,9 +432,11 @@ function App() {
       },
       onOpen: (sid) => {
         setActiveSessionId(sid)
+        const watchUrl = getPlayerUrl(sid, roomParam)
         if (roomParam) {
-          const watchUrl = getPlayerUrl(sid, roomParam)
           sendChannelMessage(`new stream: ${watchUrl}`, 'event')
+        } else {
+          addChatMessage(`new stream: ${watchUrl}`)
         }
       },
       onClose: () => {
