@@ -12,6 +12,22 @@
 	"upload_source_maps": true,
 	"kv_namespaces": [
 	],
+	"migrations": [
+		{
+			"new_sqlite_classes": [
+				"LiveRoom"
+			],
+			"tag": "v1",
+		},
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"class_name": "LiveRoom",
+				"name": "LIVE_ROOM",
+			},
+		],
+	},
 	"vars": {
 		"ENV": "dev"
 	},

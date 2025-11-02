@@ -14,6 +14,7 @@
     "@eyevinn/webrtc-player": "^0.13.0",
     "@eyevinn/whip-web-client": "^1.1.6",
     "@faker-js/faker": "^10.0.0",
+    "@protobuf-ts/runtime": "^2.11.1",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/supabase-js": "^2.58.0",

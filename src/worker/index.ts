@@ -1,6 +1,11 @@
 import { Hono, Context } from 'hono'
+import { upgradeWebSocket } from 'hono/cloudflare-workers'
+import { LiveRoom as LiveRoom_ } from './live-room'
+
+export class LiveRoom extends LiveRoom_ { }
 
 type Bindings = {
+  LIVE_ROOM: DurableObjectNamespace<LiveRoom>
   LOCAL_DEBUG: boolean
   RTC_API_URL: string
   RTC_API_TOKEN: string
@@ -95,6 +100,24 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/api', (c) => c.text(crypto.randomUUID()))
 
+// hbbs ws api
+app.get('/ws', upgradeWebSocket((c) => {
+  return {
+    onClose: () => {
+      console.log('hbbs ws close')
+    },
+    onMessage: async (event, ws) => {
+      console.log('hbbs ws message', event.data)
+      if (typeof event.data === 'string') {
+        const roomId = c.env.LIVE_ROOM.idFromName(event.data)
+        const roomObj = c.env.LIVE_ROOM.get(roomId)
+        const sid = await roomObj.getSessionId()
+        ws.send(`sid: ${sid}`)
+      }
+    },
+  }
+}))
+
 // supabase proxy
 app.all('/api/supabase/*', async (c) => {
   const supaUrl = new URL(c.env.SUPABASE_URL)
@@ -111,7 +134,18 @@ app.all('/api/supabase/*', async (c) => {
   return fetch(newRequest)
 })
 
-// api create session
+// api get session id by name
+app.get('/api/rooms/:name?', async (c) => {
+  const name = c.req.param('name')
+  if (name) {
+    const roomId = c.env.LIVE_ROOM.idFromName(name)
+    const roomObj = c.env.LIVE_ROOM.get(roomId)
+    return c.text(await roomObj.getSessionId())
+  }
+  return c.text('', 400)
+})
+
+// api create session, whip api
 app.post('/api/sessions/:name?', async (c) => {
   const sdp = await c.req.text()
   if (!sdp?.length) {
@@ -143,6 +177,13 @@ app.post('/api/sessions/:name?', async (c) => {
 
   // create session secret
   const secret = crypto.randomUUID()
+  const name = c.req.param('name')
+  if (name) {
+    const roomId = c.env.LIVE_ROOM.idFromName(name)
+    const roomObj = c.env.LIVE_ROOM.get(roomId)
+    roomObj.setSessionId(sid)
+  }
+
   c.header('Location', `/api/sessions/${secret}/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
@@ -201,7 +242,7 @@ app.delete('/api/sessions/:secret/:sid', async (c) => {
   return c.json({}, 200)
 })
 
-// api play session
+// api play session, whep api
 app.post('/api/sessions/:sid/play', async (c) => {
   const streamSid = c.req.param('sid')
   const sessionStat = await getSessionStatus(c, streamSid)
@@ -264,286 +305,6 @@ async function getSessionStatus(c: Context, sid: string) {
     method: 'GET',
   })
   return await res.json() as SessionStatus
-}
-
-// sdp experiment
-interface MediaSdp {
-  m: string
-  mid: string
-  ice: string[]
-  sendOrRecv: string
-  content: string[]
-}
-
-function disableMedia(media: MediaSdp): MediaSdp {
-  if (!media.m)
-    return media
-
-  const newContent = []
-  for (const line of media.content) {
-    if (line.startsWith('a=extmap')) {
-      continue
-    }
-    if (line.startsWith('a=rtpmap')) {
-      continue
-    }
-    if (line.startsWith('a=rtcp-fb')) {
-      continue
-    }
-    if (line.startsWith('a=fmtp')) {
-      continue
-    }
-    newContent.push(line)
-  }
-
-  if (media.m.startsWith('m=video')) {
-    media.m = 'm=video 9 UDP/TLS/RTP/SAVPF 96'
-    newContent.push('a=rtpmap:96 VP8/90000')
-  }
-  if (media.m.startsWith('m=audio')) {
-    media.m = 'm=audio 0 UDP/TLS/RTP/SAVPF 111'
-    newContent.push('a=rtpmap:111 opus/48000/2')
-  }
-  media.ice = []
-  media.sendOrRecv = 'a=recvonly'
-  media.content = newContent
-
-  return media
-}
-
-// @ts-expect-error keep
-function _getMediaFromSdp(sfuOffer: SessionDescription): MediaSdp[] {
-  const ret: MediaSdp[] = []
-  const lines = sfuOffer.sdp.split('\r\n')
-
-  let activeMedia = null
-  for (const line of lines) {
-    if (line.length == 0) {
-      continue
-    }
-    if (line.startsWith('m=')) {
-      activeMedia = {
-        m: line,
-        mid: '',
-        sendOrRecv: '',
-        ice: [],
-        content: [],
-      } as MediaSdp
-      ret.push(activeMedia)
-      continue
-    }
-    if (!activeMedia) {
-      continue
-    }
-    if (line.startsWith('a=candidate:') || line.startsWith('a=ice-') || line.startsWith('a=fingerprint')) {
-      activeMedia.ice.push(line)
-      continue
-    }
-    if (line.startsWith('a=mid')) {
-      activeMedia.mid = line
-      continue
-    }
-    if (line.startsWith('a=send') || line.startsWith('a=recv')) {
-      activeMedia.sendOrRecv = line
-      continue
-    }
-    activeMedia.content.push(line)
-  }
-
-  return ret
-}
-
-// @ts-expect-error keep
-function _createAnswerForPlayer(sfuMedia: MediaSdp[], playerMedia: MediaSdp[], baseOffer: SessionDescription): SessionDescription {
-  const finalMedia: MediaSdp[] = []
-
-  let validAudio: MediaSdp | null = null
-  let validVideo: MediaSdp | null = null
-  const validCandidate: string[] = []
-  sfuMedia.forEach(media => {
-    const valid = media.sendOrRecv.startsWith('a=send')
-    if (valid) {
-      if (media.m.startsWith('m=video'))
-        validVideo = media
-      if (media.m.startsWith('m=audio'))
-        validAudio = media
-    }
-    media.ice.forEach(ice => {
-      if (ice.startsWith('a=candidate'))
-        validCandidate.push(ice)
-    })
-  })
-
-  for (const media of playerMedia) {
-    if (media.m.startsWith('m=video')) {
-      if (validVideo) {
-        const m = validVideo as MediaSdp
-        m.mid = media.mid
-        finalMedia.push(m)
-      } else {
-        finalMedia.push(disableMedia(media))
-      }
-    }
-    if (media.m.startsWith('m=audio')) {
-      if (validAudio) {
-        const m = validAudio as MediaSdp
-        m.mid = media.mid
-        finalMedia.push(validAudio)
-      } else {
-        finalMedia.push(disableMedia(media))
-      }
-    }
-  }
-  
-  const answerLines: string[] = []
-  const lines = baseOffer.sdp.split('\r\n')
-  for (const line of lines) {
-    if (line.startsWith('a=group:BUNDLE')) {
-      const mids = finalMedia
-        .map(m => m.mid.replace('a=mid:', '').trim())
-        .filter(mid => mid !== '')
-        .join(' ')
-      answerLines.push(`a=group:BUNDLE ${mids}`)
-      continue
-    }
-    if (line.startsWith('m=')) {
-      break
-    }
-    answerLines.push(line)
-  }
-
-  console.log('player', playerMedia)
-  console.log('a', validAudio)
-  console.log('v', validVideo)
-  console.log('final', finalMedia)
-  console.log('ans1', answerLines)
-
-  let hasCandidate = false
-  for (const media of finalMedia) {
-    answerLines.push(media.m)
-    media.content.forEach(content => {
-      if (content.startsWith('a=setup')) {
-        answerLines.push('a=setup:passive')
-      } else {
-        answerLines.push(content)
-      }
-    })
-    media.ice.forEach(ice => {
-      if (ice.startsWith('a=candidate')) {
-        hasCandidate = true
-      }
-      answerLines.push(ice)
-    })
-    if (!hasCandidate) {
-      validCandidate.forEach(cand => {
-        answerLines.push(cand)
-      })
-      answerLines.push('a=end-of-candidates')
-      hasCandidate = true
-    }
-
-    answerLines.push(media.mid)
-    answerLines.push(media.sendOrRecv)
-  }
-
-  return {
-    type: 'answer',
-    sdp: answerLines.join('\r\n') + '\r\n',
-  }
-}
-
-// @ts-expect-error keep
-function _createAnswerForSfu(sfuMedia: MediaSdp[], playerMedia: MediaSdp[], baseOffer: SessionDescription): SessionDescription {
-  const finalMedia: MediaSdp[] = []
-
-  let validAudio: MediaSdp | null = null
-  let validVideo: MediaSdp | null = null
-  const validCandidate: string[] = []
-  playerMedia.forEach(media => {
-    const valid = media.sendOrRecv.startsWith('a=send')
-    if (valid) {
-      if (media.m.startsWith('m=video'))
-        validVideo = media
-      if (media.m.startsWith('m=audio'))
-        validAudio = media
-    }
-    media.ice.forEach(ice => {
-      if (ice.startsWith('a=candidate'))
-        validCandidate.push(ice)
-    })
-  })
-
-  for (const media of sfuMedia) {
-    if (media.m.startsWith('m=video')) {
-      if (validVideo) {
-        const m = validVideo as MediaSdp
-        m.mid = media.mid
-        finalMedia.push(m)
-      } else {
-        finalMedia.push(disableMedia(media))
-      }
-    }
-    if (media.m.startsWith('m=audio')) {
-      if (validAudio) {
-        const m = validAudio as MediaSdp
-        m.mid = media.mid
-        finalMedia.push(validAudio)
-      } else {
-        finalMedia.push(disableMedia(media))
-      }
-    }
-  }
-  
-  const answerLines: string[] = []
-  const lines = baseOffer.sdp.split('\r\n')
-  for (const line of lines) {
-    if (line.startsWith('a=group:BUNDLE')) {
-      const mids = finalMedia
-        .map(m => m.mid.replace('a=mid:', '').trim())
-        .filter(mid => mid !== '')
-        .join(' ')
-      answerLines.push(`a=group:BUNDLE ${mids}`)
-      continue
-    }
-    if (line.startsWith('m=')) {
-      break
-    }
-    answerLines.push(line)
-  }
-
-
-  let hasCandidate = false
-  for (const media of finalMedia) {
-    answerLines.push(media.m)
-    media.content.forEach(content => {
-      if (content.startsWith('a=setup')) {
-        answerLines.push('a=setup:passive')
-      } else {
-        answerLines.push(content)
-      }
-    })
-    media.ice.forEach(ice => {
-      if (ice.startsWith('a=candidate')) {
-        hasCandidate = true
-      }
-      answerLines.push(ice)
-    })
-    if (!hasCandidate) {
-      validCandidate.forEach(cand => {
-        answerLines.push(cand)
-      })
-      answerLines.push('a=end-of-candidates')
-      hasCandidate = true
-    }
-
-    answerLines.push(media.mid)
-    answerLines.push(media.sendOrRecv)
-  }
-
-  return {
-    type: 'answer',
-    sdp: answerLines.join('\r\n') + '\r\n',
-  }
 }
 
 export default app
