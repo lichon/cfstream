@@ -1,7 +1,3 @@
-# Full-stack WHIP/WHEP streaming back by Cloudflare Workers and Serverless SFU
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lichon/cfstream)
-
 ## Development
 
 Install dependencies:
