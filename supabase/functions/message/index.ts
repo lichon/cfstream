@@ -7,7 +7,7 @@ Deno.serve(async (req)=>{
   return fetch(`${szUrl}/realtime/v1/api/broadcast`, {
     method: 'POST',
     headers: {
-      'apikey': Deno.env.get('SZ_KEY'),
+      'apikey': Deno.env.get('SZ_KEY') || '',
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({

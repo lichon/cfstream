@@ -1,9 +1,4 @@
 import { Hono, Context } from 'hono'
-import {
-  delStreamRoom, newStreamRoom, getStreamRoom, getStreamRoomByName,
-  getStreamSubs, putStreamSubs, delStreamSubs,
-  sendChannelMessage,
-} from './supabase'
 
 type Bindings = {
   LOCAL_DEBUG: boolean
@@ -116,43 +111,6 @@ app.all('/api/supabase/*', async (c) => {
   return fetch(newRequest)
 })
 
-// update stream room's name
-app.post('/api/rooms', async (c) => {
-  const reqRoom = await c.req.json()
-  if (!reqRoom?.name || !reqRoom?.id || !reqRoom?.secret) {
-    return c.text('invalid request', 400)
-  }
-  const room = await getStreamRoom(c, reqRoom.id)
-  // check secret for room
-  if (room?.secret !== reqRoom?.secret) {
-    return c.json({}, 403)
-  }
-
-  const ok = await newStreamRoom(c, { ...reqRoom })
-  return c.json({}, ok ? 200 : 500)
-})
-
-// api get room id by name
-app.get('/api/rooms/:name', async (c) => {
-  const name = c.req.param('name')
-  if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.text('invalid room', 404)
-  }
-  const room = await getStreamRoomByName(c, name)
-  return room ? c.text(room.id, 200) : c.text('', 404)
-})
-
-// post message to room
-app.post('/api/rooms/:name/message', async (c) => {
-  const name = c.req.param('name')
-  if (!name?.length || name === 'null' || name === 'undefined') {
-    return c.text('invalid room', 404)
-  }
-  const msg = await c.req.json()
-  const ok = await sendChannelMessage(c, name, msg.content)
-  return c.json({}, ok ? 200 : 500)
-})
-
 // api create session
 app.post('/api/sessions/:name?', async (c) => {
   const sdp = await c.req.text()
@@ -184,18 +142,11 @@ app.post('/api/sessions/:name?', async (c) => {
   const tracksRes = await res.json() as TracksResponse
 
   // create session secret
-  const name = c.req.param('name')
   const secret = crypto.randomUUID()
-  const succ = await newStreamRoom(c, {
-    id: sid,
-    name: name || sid,
-    secret: secret
-  })
-
   c.header('Location', `/api/sessions/${secret}/${sid}`)
   c.header('Access-Control-Expose-Headers', 'Location')
   c.header('Access-Control-Allow-Origin', '*')
-  return succ ? c.text(tracksRes.sessionDescription?.sdp || '') : c.text('create failed', 500)
+  return c.text(tracksRes.sessionDescription?.sdp || '')
 })
 
 // api patch session, bind dc to session
@@ -207,6 +158,8 @@ app.patch('/api/sessions/:sid', async (c) => {
     if (sessionStatus.datachannels?.length || sessionStatus.tracks?.length) {
       return c.text('', 403)
     }
+    // disable kick function
+    return c.text('', 201)
 
     // const kickBySubSession = c.req.header('X-Sub-Session')
     // this would break the session's ice connection by cf sfu
@@ -244,15 +197,6 @@ app.patch('/api/sessions/:sid', async (c) => {
 // api delete session
 app.delete('/api/sessions/:secret/:sid', async (c) => {
   const sid = c.req.param('sid')
-  const secret = c.req.param('secret')
-  const room = await getStreamRoom(c, sid)
-  // check secret for session
-  if (!sid || secret !== room?.secret) {
-    return c.json({}, 403)
-  }
-
-  await delStreamRoom(c, sid)
-  await delStreamSubs(c, sid)
   console.log(`del stream session ${sid}`)
   return c.json({}, 200)
 })
@@ -280,7 +224,7 @@ app.post('/api/sessions/:sid/play', async (c) => {
   console.log(`new play session ${playerSid}`)
 
   // save new sub to session
-  await putStreamSubs(c, streamSid, playerSid)
+  // await putStreamSubs(c, streamSid, playerSid)
 
   c.header('Location', `/api/sessions/${playerSid}/play`)
   c.header('Access-Control-Expose-Headers', 'Location')
@@ -294,7 +238,7 @@ app.get('/api/sessions/:sid', async (c) => {
   if (!sid?.length || sid === 'null' || sid === 'undefined') {
     return c.json({}, 404)
   }
-  const subs = await getStreamSubs(c, sid)
+  const subs = [] as string[] // await getStreamSubs(c, sid)
   const status = await getSessionStatus(c, sid)
   status.subs = subs.length ? subs : []
   return c.json(status)

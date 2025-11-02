@@ -423,7 +423,7 @@ function App() {
       return
     }
 
-    // TODO start whip on 'connect' request
+    // SFU mode with worker api
     const streamer = new WHIPStreamer({
       sessionName: roomParam,
       videoElement: videoRef.current!,
