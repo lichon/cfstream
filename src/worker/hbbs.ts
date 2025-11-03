@@ -51,6 +51,12 @@ export class Hbbr extends DurableObject {
 
   async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
     ws.close(code, "client closed")
+    if (this.accaptor) {
+      this.accaptor.close(code, "peer closed")
+    }
+    if (this.initiator) {
+      this.initiator.close(code, "peer closed")
+    }
   }
 
   handleRelayRequest(req: rendezvous.RequestRelay, socket: WebSocket) {
