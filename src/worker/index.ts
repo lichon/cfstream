@@ -1,10 +1,14 @@
 import { Hono, Context } from 'hono'
-import { upgradeWebSocket } from 'hono/cloudflare-workers'
 import { LiveRoom as LiveRoom_ } from './live-room'
+import { Hbbs as Hbbs_, Hbbr as Hbbr_ } from './hbbs'
 
 export class LiveRoom extends LiveRoom_ { }
+export class Hbbs extends Hbbs_ { }
+export class Hbbr extends Hbbr_ { }
 
 type Bindings = {
+  HBBS: DurableObjectNamespace<Hbbs>
+  HBBR: DurableObjectNamespace<Hbbr>
   LIVE_ROOM: DurableObjectNamespace<LiveRoom>
   LOCAL_DEBUG: boolean
   RTC_API_URL: string
@@ -101,22 +105,22 @@ const app = new Hono<{ Bindings: Bindings }>()
 app.get('/api', (c) => c.text(crypto.randomUUID()))
 
 // hbbs ws api
-app.get('/ws', upgradeWebSocket((c) => {
-  return {
-    onClose: () => {
-      console.log('hbbs ws close')
-    },
-    onMessage: async (event, ws) => {
-      console.log('hbbs ws message', event.data)
-      if (typeof event.data === 'string') {
-        const roomId = c.env.LIVE_ROOM.idFromName(event.data)
-        const roomObj = c.env.LIVE_ROOM.get(roomId)
-        const sid = await roomObj.getSessionId()
-        ws.send(`sid: ${sid}`)
-      }
-    },
+app.get('/ws/id', async (c) => {
+  const hbbsId = c.env.HBBS.idFromName('hbbs')
+  const hbbsObj = c.env.HBBS.get(hbbsId)
+  return hbbsObj.fetch(c.req.raw)
+})
+
+app.get('/ws/relay/:session', async (c) => {
+  const session = c.req.param('session')
+  if (!session?.length) {
+    return c.text('invalid request', 400)
   }
-}))
+  const hbbrId = c.env.HBBR.idFromName(session)
+  const hbbrObj = c.env.HBBR.get(hbbrId)
+  return hbbrObj.fetch(c.req.raw)
+})
+
 
 // supabase proxy
 app.all('/api/supabase/*', async (c) => {
