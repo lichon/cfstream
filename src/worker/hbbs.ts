@@ -6,8 +6,8 @@ export class Hbbr extends DurableObject {
   initiator: WebSocket | undefined
   accaptor: WebSocket | undefined
 
-  async fetch(req: Request): Promise<Response> {
-    console.log(`hbbr fetch ${req.url}`)
+  async fetch(_req: Request): Promise<Response> {
+    // console.log(`hbbr fetch ${req.url}`)
     // Creates two ends of a WebSocket connection.
     const webSocketPair = new WebSocketPair()
     const [client, server] = Object.values(webSocketPair)
@@ -24,8 +24,6 @@ export class Hbbr extends DurableObject {
       // message from initiator, forward to acceptor
       if (this.accaptor && this.accaptor.readyState === 1) {
         this.accaptor.send(message)
-      } else {
-        console.log('hbbr initiator message but accaptor not ready')
       }
       return
     }
@@ -33,8 +31,6 @@ export class Hbbr extends DurableObject {
       // message from acceptor, forward to initiator
       if (this.initiator && this.initiator.readyState === 1) {
         this.initiator.send(message)
-      } else {
-        console.log('hbbr accaptor message but initiator not ready')
       }
       return
     }
@@ -42,7 +38,7 @@ export class Hbbr extends DurableObject {
     // new connection message
     if (message instanceof ArrayBuffer) {
       const msg = rendezvous.RendezvousMessage.fromBinary(new Uint8Array(message))
-      console.log(`rendezvous relay received ${message.byteLength}`, msg)
+      // console.log(`rendezvous relay received ${message.byteLength}`, msg)
       switch (msg.union?.oneofKind) {
         case 'requestRelay':
           this.handleRelayRequest(msg.union.requestRelay, socket)
@@ -54,8 +50,7 @@ export class Hbbr extends DurableObject {
   }
 
   async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
-    console.log('WebSocket relay closed')
-    ws.close(code, "client closing WebSocket")
+    ws.close(code, "client closed")
   }
 
   handleRelayRequest(req: rendezvous.RequestRelay, socket: WebSocket) {
@@ -82,13 +77,7 @@ export class Hbbs extends DurableObject {
     socket: WebSocket,
   }> = new Map()
 
-  // sockets waiting for relay response
-  waitingRelayResponse: Map<string, {
-    socket: WebSocket,
-  }> = new Map()
-
   constructor(ctx: DurableObjectState, env: unknown) {
-    console.log(`hbbs object init ${ctx.id.toString()}`)
     super(ctx, env)
 
     // We will track metadata for each client WebSocket object in `sessions`.
@@ -98,7 +87,7 @@ export class Hbbs extends DurableObject {
       // so get previously serialized metadata for any existing WebSockets.
       const meta = webSocket.deserializeAttachment()
       if (!meta) {
-        console.log('hbbr no meta on websocket', webSocket)
+        // console.log('hbbr no meta on websocket', webSocket)
         return
       }
       meta.socket = webSocket
@@ -110,8 +99,8 @@ export class Hbbs extends DurableObject {
     })
   }
 
-  async fetch(req: Request): Promise<Response> {
-    console.log(`hbbs fetch ${req.url}`)
+  async fetch(_req: Request): Promise<Response> {
+    // console.log(`hbbs fetch ${req.url}`)
     // Creates two ends of a WebSocket connection.
     const webSocketPair = new WebSocketPair()
     const [client, server] = Object.values(webSocketPair)
@@ -129,10 +118,10 @@ export class Hbbs extends DurableObject {
 
   // receiving a message from the client
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
-    const meta = ws.deserializeAttachment()
     if (message instanceof ArrayBuffer) {
       const msg = rendezvous.RendezvousMessage.fromBinary(new Uint8Array(message))
-      console.log(`rendezvous received ${message.byteLength} from ${meta?.id}`, msg)
+      // const meta = ws.deserializeAttachment()
+      // console.log(`rendezvous received ${message.byteLength} from ${meta?.id}`, msg)
       switch (msg.union?.oneofKind) {
         case 'registerPk':
           this.handleRegisterPk(msg.union.registerPk, ws)
@@ -155,7 +144,7 @@ export class Hbbs extends DurableObject {
 
   // client closes the connection, the runtime will invoke the webSocketClose() handler.
   async webSocketClose(ws: WebSocket, code: number, _reason: string, _wasClean: boolean) {
-    ws.close(code, "Durable Object is closing WebSocket")
+    ws.close(code, "client closed")
   }
 
   sendRendezvous(data: unknown, socket: WebSocket | undefined) {
@@ -173,17 +162,13 @@ export class Hbbs extends DurableObject {
         ...data
       }
     } as rendezvous.RendezvousMessage
-    const meta = socket.deserializeAttachment()
-    console.log(`Sending rendezvous to ${meta?.id}:`, msg)
+    // const meta = socket.deserializeAttachment()
+    // console.log(`Sending rendezvous to ${meta?.id}:`, msg)
     socket.send(rendezvous.RendezvousMessage.toBinary(msg))
   }
 
   handleRelayResponse(res: rendezvous.RelayResponse, _socket: WebSocket) {
-    // relay response always comes from a new connection, don't known which requester it is for
-    for (const requester of this.waitingRelayResponse.values()) {
-      console.log(`Handling relay response to requester:`, requester)
-      this.sendRendezvous({ relayResponse: res }, requester?.socket)
-    }
+    console.log(`Handling relay response: ${res.version}`)
   }
 
   handlePunchHoleRequest(req: rendezvous.PunchHoleRequest, socket: WebSocket) {
@@ -208,17 +193,22 @@ export class Hbbs extends DurableObject {
       return
     }
 
-    // wtf, no tracking transaction for the ph request
-    this.waitingRelayResponse.set('ph-requester', {
-      socket: socket,
-    })
-    const newRelaySession = crypto.randomUUID()
+    const relayUrl = (this.env as { HBBS_RELAY_URL?: string }).HBBS_RELAY_URL || 'ws://localhost'
+    const uuid = crypto.randomUUID()
     this.sendRendezvous({
-      punchHole: rendezvous.PunchHole.create({
-        relayServer: 'ws://localhost/ws/relay/' + newRelaySession,
-        forceRelay: true,
+      requestRelay: rendezvous.RequestRelay.create({
+        id: targetId,
+        uuid: uuid,
+        relayServer: `${relayUrl}/ws/relay/${uuid}`,
       })
     }, onlineSession.socket)
+    this.sendRendezvous({
+      relayResponse: rendezvous.RelayResponse.create({
+        uuid: uuid,
+        relayServer: `${relayUrl}/ws/relay/${uuid}`,
+        version: '1.4.3',
+      })
+    }, socket)
   }
 
   handleRegisterPk(req: rendezvous.RegisterPk, socket: WebSocket) {
@@ -252,6 +242,7 @@ export class Hbbs extends DurableObject {
     if (!peerId) {
       return
     }
+    // TODO fill up online peers states
     const states = new Uint8Array(req.peers.length)
     states.fill(0)
     this.sendRendezvous({
