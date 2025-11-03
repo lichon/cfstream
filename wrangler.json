@@ -16,8 +16,6 @@
 		{
 			"new_sqlite_classes": [
 				"LiveRoom",
-				"Hbbs",
-				"Hbbr",
 			],
 			"tag": "v1",
 		},
@@ -27,14 +25,6 @@
 			{
 				"class_name": "LiveRoom",
 				"name": "LIVE_ROOM",
-			},
-			{
-				"class_name": "Hbbs",
-				"name": "HBBS",
-			},
-			{
-				"class_name": "Hbbr",
-				"name": "HBBR",
 			},
 		],
 	},
